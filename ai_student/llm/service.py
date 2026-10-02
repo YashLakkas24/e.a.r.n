@@ -44,6 +44,8 @@ from ai_student.career_pivot.schemas import (
 
 DEFAULT_MODEL = os.getenv("AI_MODEL", "gpt-5-nano")
 
+SKILL_GAP_MODEL = os.getenv("SKILL_GAP_MODEL", "gpt-6-luna")
+
 VALID_MODELS = [
     DEFAULT_MODEL,
 ]
@@ -977,6 +979,8 @@ Return ONLY valid JSON.
 """
 
     response = safe_chat_completion(
+        model=SKILL_GAP_MODEL,
+        reasoning_effort="none",
         messages=[
             {
                 "role": "system",
