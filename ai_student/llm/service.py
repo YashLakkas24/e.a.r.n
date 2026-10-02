@@ -1111,6 +1111,8 @@ Return ONLY valid JSON.
 """
 
     response = safe_chat_completion(
+        model=SKILL_GAP_MODEL,
+        reasoning_effort="none",
         messages=[
             {
                 "role": "system",
