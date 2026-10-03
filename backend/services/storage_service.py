@@ -3,7 +3,14 @@ from urllib import error, request
 from urllib.parse import quote
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+
+# New Supabase secret key, with legacy service-role fallback
+SUPABASE_SECRET_KEY = (
+    os.getenv("SUPABASE_SECRET_KEY")
+    or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    or ""
+)
+
 NOTICE_BUCKET = os.getenv("SUPABASE_NOTICE_BUCKET", "notice-documents")
 
 
@@ -11,8 +18,8 @@ def _validate_config():
     if not SUPABASE_URL:
         raise RuntimeError("SUPABASE_URL is not configured.")
 
-    if not SUPABASE_SERVICE_ROLE_KEY:
-        raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is not configured.")
+    if not SUPABASE_SECRET_KEY:
+        raise RuntimeError("SUPABASE_SECRET_KEY is not configured.")
 
 
 def _storage_object_url(storage_path: str) -> str:
@@ -51,8 +58,7 @@ def upload_notice_file(
         data=file_bytes,
         method="POST",
         headers={
-            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "apikey": SUPABASE_SECRET_KEY,
             "Content-Type": content_type,
             "x-upsert": "false",
         },
@@ -91,8 +97,7 @@ def download_notice_file(storage_path: str) -> bytes:
         url,
         method="GET",
         headers={
-            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "apikey": SUPABASE_SECRET_KEY,
         },
     )
 
