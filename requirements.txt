@@ -18,3 +18,4 @@ numpy
 pytesseract
 Pillow
 pdf2image
+supabase
