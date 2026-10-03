@@ -6,29 +6,20 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 NOTICE_BUCKET = os.getenv("SUPABASE_NOTICE_BUCKET", "notice-documents")
 
-# New Supabase secret key, with legacy service-role fallback
-SUPABASE_SECRET_KEY = (
-    os.getenv("SUPABASE_SECRET_KEY")
-    or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-    or ""
-)
-
-NOTICE_BUCKET = os.getenv("SUPABASE_NOTICE_BUCKET", "notice-documents")
-
 
 def _validate_config():
     if not SUPABASE_URL:
         raise RuntimeError("SUPABASE_URL is not configured.")
 
-    if not SUPABASE_SECRET_KEY:
-        raise RuntimeError("SUPABASE_SECRET_KEY is not configured.")
+    if not SUPABASE_SERVICE_ROLE_KEY:
+        raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is not configured.")
 
 
 def _storage_object_url(storage_path: str) -> str:
     encoded_bucket = quote(NOTICE_BUCKET, safe="")
     encoded_path = quote(storage_path, safe="/")
 
-    return f"{SUPABASE_URL}/storage/v1/object/" f"{encoded_bucket}/{encoded_path}"
+    return f"{SUPABASE_URL}/storage/v1/object/{encoded_bucket}/{encoded_path}"
 
 
 def get_public_notice_url(storage_path: str) -> str:
@@ -36,7 +27,8 @@ def get_public_notice_url(storage_path: str) -> str:
     encoded_path = quote(storage_path, safe="/")
 
     return (
-        f"{SUPABASE_URL}/storage/v1/object/public/" f"{encoded_bucket}/{encoded_path}"
+        f"{SUPABASE_URL}/storage/v1/object/public/"
+        f"{encoded_bucket}/{encoded_path}"
     )
 
 
@@ -60,11 +52,11 @@ def upload_notice_file(
         data=file_bytes,
         method="POST",
         headers={
-        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-        "apikey": SUPABASE_SERVICE_ROLE_KEY,
-        "Content-Type": content_type,
-        "x-upsert": "false",
-    }
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "Content-Type": content_type,
+            "x-upsert": "false",
+        },
     )
 
     try:
@@ -75,7 +67,7 @@ def upload_notice_file(
         body = exc.read().decode("utf-8", errors="replace")
 
         raise RuntimeError(
-            f"Supabase Storage upload failed " f"({exc.code}): {body}"
+            f"Supabase Storage upload failed ({exc.code}): {body}"
         ) from exc
 
     except error.URLError as exc:
@@ -113,7 +105,7 @@ def download_notice_file(storage_path: str) -> bytes:
         body = exc.read().decode("utf-8", errors="replace")
 
         raise RuntimeError(
-            f"Supabase Storage download failed " f"({exc.code}): {body}"
+            f"Supabase Storage download failed ({exc.code}): {body}"
         ) from exc
 
     except error.URLError as exc:
