@@ -22,7 +22,7 @@
 ### 🔗 Live Links
 
 - [🚀 Open E.A.R.N.](https://e-a-r-n.vercel.app/)
-- [⚙️ FastAPI Backend](https://academic-early-warning.onrender.com)
+- [⚙️ FastAPI Backend](https://earn-backend-0hbk.onrender.com/)
 - [📚 Swagger API Docs](https://academic-early-warning.onrender.com/docs)
 
 
