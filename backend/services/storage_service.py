@@ -3,6 +3,7 @@ from urllib import error, request
 from urllib.parse import quote
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+SUPABASE_SECRET_KEY = os.getenv("SUPABASE_SECRET_KEY", "")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 NOTICE_BUCKET = os.getenv("SUPABASE_NOTICE_BUCKET", "notice-documents")
 
@@ -10,6 +11,9 @@ NOTICE_BUCKET = os.getenv("SUPABASE_NOTICE_BUCKET", "notice-documents")
 def _validate_config():
     if not SUPABASE_URL:
         raise RuntimeError("SUPABASE_URL is not configured.")
+
+    if not SUPABASE_SECRET_KEY:
+        raise RuntimeError("SUPABASE_SECRET_KEY is not configured.")
 
     if not SUPABASE_SERVICE_ROLE_KEY:
         raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is not configured.")
@@ -37,11 +41,6 @@ def upload_notice_file(
     storage_path: str,
     content_type: str,
 ) -> str:
-    """
-    Upload a notice document to Supabase Storage.
-
-    Returns the public URL of the uploaded document.
-    """
 
     _validate_config()
 
@@ -52,8 +51,8 @@ def upload_notice_file(
         data=file_bytes,
         method="POST",
         headers={
+            "apikey": SUPABASE_SECRET_KEY,
             "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-            "apikey": SUPABASE_SERVICE_ROLE_KEY,
             "Content-Type": content_type,
             "x-upsert": "false",
         },
@@ -65,7 +64,6 @@ def upload_notice_file(
 
     except error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
-
         raise RuntimeError(
             f"Supabase Storage upload failed ({exc.code}): {body}"
         ) from exc
@@ -79,10 +77,6 @@ def upload_notice_file(
 
 
 def download_notice_file(storage_path: str) -> bytes:
-    """
-    Download a previously uploaded notice from Supabase Storage.
-    Used by the background processing worker.
-    """
 
     _validate_config()
 
@@ -92,8 +86,8 @@ def download_notice_file(storage_path: str) -> bytes:
         url,
         method="GET",
         headers={
+            "apikey": SUPABASE_SECRET_KEY,
             "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-            "apikey": SUPABASE_SERVICE_ROLE_KEY,
         },
     )
 
@@ -103,7 +97,6 @@ def download_notice_file(storage_path: str) -> bytes:
 
     except error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
-
         raise RuntimeError(
             f"Supabase Storage download failed ({exc.code}): {body}"
         ) from exc
