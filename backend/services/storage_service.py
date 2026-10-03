@@ -3,6 +3,8 @@ from urllib import error, request
 from urllib.parse import quote
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+NOTICE_BUCKET = os.getenv("SUPABASE_NOTICE_BUCKET", "notice-documents")
 
 # New Supabase secret key, with legacy service-role fallback
 SUPABASE_SECRET_KEY = (
@@ -58,10 +60,11 @@ def upload_notice_file(
         data=file_bytes,
         method="POST",
         headers={
-            "apikey": SUPABASE_SECRET_KEY,
-            "Content-Type": content_type,
-            "x-upsert": "false",
-        },
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Content-Type": content_type,
+        "x-upsert": "false",
+    }
     )
 
     try:
@@ -97,7 +100,8 @@ def download_notice_file(storage_path: str) -> bytes:
         url,
         method="GET",
         headers={
-            "apikey": SUPABASE_SECRET_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+            "apikey": SUPABASE_SERVICE_ROLE_KEY,
         },
     )
 
