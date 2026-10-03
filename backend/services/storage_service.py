@@ -1,7 +1,7 @@
 import os
 from urllib.parse import quote
 
-from supabase import create_client, Client
+from supabase import Client, create_client
 
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
@@ -15,6 +15,9 @@ def _validate_config():
 
     if not SUPABASE_SECRET_KEY:
         raise RuntimeError("SUPABASE_SECRET_KEY is not configured.")
+
+    if not NOTICE_BUCKET:
+        raise RuntimeError("SUPABASE_NOTICE_BUCKET is not configured.")
 
 
 def _get_supabase_client() -> Client:
@@ -54,7 +57,6 @@ def upload_notice_file(
                 "upsert": False,
             },
         )
-
     except Exception as exc:
         raise RuntimeError(
             f"Supabase Storage upload failed: {exc}"
@@ -73,7 +75,6 @@ def download_notice_file(storage_path: str) -> bytes:
 
     try:
         return supabase.storage.from_(NOTICE_BUCKET).download(storage_path)
-
     except Exception as exc:
         raise RuntimeError(
             f"Supabase Storage download failed: {exc}"
