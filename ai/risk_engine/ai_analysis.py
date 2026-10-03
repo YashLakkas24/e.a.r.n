@@ -14,7 +14,7 @@ ENV_PATH = PROJECT_ROOT / ".env"
 load_dotenv(dotenv_path=ENV_PATH, override=True)
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = "gpt-5-nano"
+OPENAI_MODEL = "gpt-5.4-mini"
 # =========================================================
 # OPENAI CLIENT
 # =========================================================
