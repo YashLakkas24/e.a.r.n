@@ -7,6 +7,7 @@ from openai import (
     APIError,
     InternalServerError,
     APIConnectionError,
+    APITimeoutError,
     NotFoundError,
 )
 
@@ -93,32 +94,78 @@ def safe_chat_completion(**kwargs):
     """
     Centralized OpenAI API call.
 
-    Uses GPT-5.4 mini as the single model.
-    Retries temporary API/server errors.
-    Does not perform model fallback or free-tier quota handling.
+    Uses one controlled retry for temporary failures.
+
+    The OpenAI client itself is configured with max_retries=0,
+    so retry behavior is controlled only here.
     """
 
-    max_retries = 3
+    max_retries = 1
     base_delay = 2.0
 
-    kwargs["model"] = kwargs.get("model", DEFAULT_MODEL)
+    kwargs["model"] = kwargs.get(
+        "model",
+        DEFAULT_MODEL,
+    )
 
-    # Use JSON output by default for our structured AI responses.
+    # JSON output by default.
     kwargs.setdefault(
         "response_format",
         {"type": "json_object"},
     )
 
-    for attempt in range(max_retries):
+    model = kwargs["model"]
+
+    for attempt in range(max_retries + 1):
+
+        start_time = time.perf_counter()
+
         try:
+
+            print(
+                f"[OpenAI] Request starting | "
+                f"model={model} | "
+                f"attempt={attempt + 1}/{max_retries + 1}",
+                flush=True,
+            )
+
             response = client.chat.completions.create(**kwargs)
+
+            elapsed = time.perf_counter() - start_time
+
+            print(
+                f"[OpenAI] Request completed | "
+                f"model={model} | "
+                f"time={elapsed:.2f}s",
+                flush=True,
+            )
 
             return response
 
-        except NotFoundError:
-            # Model/configuration problem.
-            # Retrying will not fix it.
-            raise
+        # ----------------------------------------------------
+        # TIMEOUT
+        # ----------------------------------------------------
+
+        except APITimeoutError as e:
+
+            elapsed = time.perf_counter() - start_time
+
+            print(
+                f"[OpenAI] TIMEOUT | " f"model={model} | " f"time={elapsed:.2f}s",
+                flush=True,
+            )
+
+            if attempt >= max_retries:
+                raise RuntimeError(
+                    f"OpenAI request timed out after "
+                    f"{elapsed:.1f}s for model '{model}'."
+                ) from e
+
+            time.sleep(base_delay)
+
+        # ----------------------------------------------------
+        # CONNECTION / SERVER / RATE LIMIT
+        # ----------------------------------------------------
 
         except (
             RateLimitError,
@@ -126,22 +173,40 @@ def safe_chat_completion(**kwargs):
             APIConnectionError,
         ) as e:
 
-            if attempt == max_retries - 1:
+            elapsed = time.perf_counter() - start_time
+
+            print(
+                f"[OpenAI] Temporary error | "
+                f"model={model} | "
+                f"time={elapsed:.2f}s | "
+                f"error={type(e).__name__}",
+                flush=True,
+            )
+
+            if attempt >= max_retries:
                 raise
 
             sleep_time = base_delay * (attempt + 1)
 
             print(
-                f"[OpenAI] Temporary error "
-                f"(attempt {attempt + 1}/{max_retries}). "
-                f"Retrying in {sleep_time:.0f}s...",
+                f"[OpenAI] Retrying in " f"{sleep_time:.0f}s...",
                 flush=True,
             )
 
             time.sleep(sleep_time)
 
+        # ----------------------------------------------------
+        # MODEL / CONFIGURATION ERROR
+        # ----------------------------------------------------
+
+        except NotFoundError:
+            raise
+
+        # ----------------------------------------------------
+        # OTHER OPENAI API ERRORS
+        # ----------------------------------------------------
+
         except APIError:
-            # Other OpenAI API errors should be surfaced directly.
             raise
 
 
@@ -373,7 +438,7 @@ def generate_interest_analysis(
         None,
     )
     print(
-        f"[Gemini] Interest Analysis finish reason: {finish_reason}",
+        f"[OpenAI] Interest Analysis finish reason: {finish_reason}",
         flush=True,
     )
 
@@ -571,12 +636,12 @@ Return ONLY valid JSON in this structure:
     )
 
     print(
-        f"\n[Gemini] Skill Discovery finish reason: " f"{finish_reason}",
+        f"\n[OpenAI] Skill Discovery finish reason: {finish_reason}",
         flush=True,
     )
 
     if content is None:
-        raise ValueError("Gemini returned an empty response for skill discovery.")
+        raise ValueError("OpenAI returned an empty response for skill discovery.")
 
     content = content.strip()
 
@@ -584,9 +649,9 @@ Return ONLY valid JSON in this structure:
     # DEBUG
     # --------------------------------------------------------
 
-    print("\n[Gemini Skill Discovery Raw Response]")
+    print("\n[OpenAI Skill Discovery Raw Response]")
     print(content)
-    print("[End Gemini Skill Discovery Raw Response]\n")
+    print("[End OpenAI Skill Discovery Raw Response]\n")
 
     # --------------------------------------------------------
     # PARSE JSON
@@ -727,6 +792,11 @@ NEVER output:
 Return ONLY valid JSON.
 """
 
+    print(
+        "\n[STAGE 3] Calling OpenAI for Skill Assessment...",
+        flush=True,
+    )
+
     response = safe_chat_completion(
         messages=[
             {
@@ -738,10 +808,44 @@ Return ONLY valid JSON.
                 "content": user_prompt,
             },
         ],
-        max_completion_tokens=5000,
+        max_completion_tokens=4000,
     )
 
-    content = response.choices[0].message.content.strip()
+    print(
+        "[STAGE 3] OpenAI returned Skill Assessment response.",
+        flush=True,
+    )
+
+    if not response.choices:
+        raise ValueError("Stage 3 Skill Assessment: OpenAI returned no choices.")
+
+    finish_reason = getattr(
+        response.choices[0],
+        "finish_reason",
+        None,
+    )
+
+    content = response.choices[0].message.content
+
+    print(
+        f"[STAGE 3] Finish reason: {finish_reason}",
+        flush=True,
+    )
+
+    if not content:
+        raise ValueError("Stage 3 Skill Assessment: OpenAI returned empty content.")
+
+    content = content.strip()
+
+    if finish_reason in (
+        "length",
+        "max_tokens",
+        "MAX_TOKENS",
+    ):
+        raise ValueError(
+            "Stage 3 Skill Assessment was truncated "
+            "because the token limit was reached."
+        )
 
     try:
         data = parse_json_from_llm(content)
@@ -872,6 +976,11 @@ Important:
 Return ONLY valid JSON.
 """
 
+    print(
+        "\n[STAGE 4] Calling OpenAI for Transferable Skills...",
+        flush=True,
+    )
+
     response = safe_chat_completion(
         messages=[
             {
@@ -883,14 +992,49 @@ Return ONLY valid JSON.
                 "content": user_prompt,
             },
         ],
-        max_completion_tokens=4000,
+        max_completion_tokens=3000,
         response_format={
             "type": "json_object",
         },
     )
 
-    content = response.choices[0].message.content.strip()
+    print(
+        "[STAGE 4] OpenAI returned Transferable Skills response.",
+        flush=True,
+    )
 
+    if not response.choices:
+        raise ValueError("Stage 4 Transferable Skills: " "OpenAI returned no choices.")
+
+    finish_reason = getattr(
+        response.choices[0],
+        "finish_reason",
+        None,
+    )
+
+    content = response.choices[0].message.content
+
+    print(
+        f"[STAGE 4] Finish reason: {finish_reason}",
+        flush=True,
+    )
+
+    if not content:
+        raise ValueError(
+            "Stage 4 Transferable Skills: " "OpenAI returned empty content."
+        )
+
+    content = content.strip()
+
+    if finish_reason in (
+        "length",
+        "max_tokens",
+        "MAX_TOKENS",
+    ):
+        raise ValueError(
+            "Stage 4 Transferable Skills was truncated "
+            "because the token limit was reached."
+        )
     try:
         data = parse_json_from_llm(content)
 
@@ -924,96 +1068,187 @@ def generate_skill_gap_analysis(
     transferable_skills: list,
 ) -> SkillGapResult:
 
-    required_skills_data = [
-        skill.model_dump() if hasattr(skill, "model_dump") else skill
-        for skill in required_skills
-    ]
-
-    skill_assessments_data = [
-        assessment.model_dump() if hasattr(assessment, "model_dump") else assessment
-        for assessment in skill_assessments
-    ]
-
-    transferable_skills_data = [
-        skill.model_dump() if hasattr(skill, "model_dump") else skill
-        for skill in transferable_skills
-    ]
-
-    user_prompt = f"""
-TARGET DIRECTION
-----------------
-{direction}
-
-REQUIRED SKILLS DISCOVERED BY STAGE 2
--------------------------------------
-{json.dumps(required_skills_data, indent=2)}
-
-CURRENT SKILL ASSESSMENTS FROM STAGE 3
---------------------------------------
-{json.dumps(skill_assessments_data, indent=2)}
-
-TRANSFERABLE SKILLS FROM STAGE 4
---------------------------------
-{json.dumps(transferable_skills_data, indent=2)}
-
-TASK
-----
-Analyze the skill gaps for ONLY this target direction.
-
-For every required skill:
-
-1. Use the required level provided by Stage 2.
-2. Use the current level provided by Stage 3.
-3. Preserve "unknown" when the current level is unknown.
-4. Consider transferable skills only as supporting context.
-5. Do not treat transferable skills as proof of the target skill.
-6. Determine the appropriate skill-gap status.
-7. Explain the result using only the provided evidence.
-
-Every required skill must appear exactly once.
-
-Do not add new skills.
-
-Return ONLY valid JSON.
-"""
-
-    response = safe_chat_completion(
-        model=SKILL_GAP_MODEL,
-        reasoning_effort="none",
-        messages=[
-            {
-                "role": "system",
-                "content": SKILL_GAP_SYSTEM_PROMPT,
-            },
-            {
-                "role": "user",
-                "content": user_prompt,
-            },
-        ],
-        max_completion_tokens=4000,
-        response_format={
-            "type": "json_object",
-        },
+    print(
+        "\n[STAGE 5] Running deterministic Skill Gap Analysis...",
+        flush=True,
     )
 
-    content = response.choices[0].message.content.strip()
+    # --------------------------------------------------------
+    # Skill level ordering
+    # --------------------------------------------------------
 
-    try:
-        data = parse_json_from_llm(content)
+    LEVEL_ORDER = {
+        "unknown": 0,
+        "beginner": 1,
+        "developing": 2,
+        "intermediate": 3,
+        "strong": 4,
+        "advanced": 5,
+    }
 
-    except Exception as e:
-        raise ValueError(
-            "LLM did not return valid JSON for skill gap analysis.\n\n"
-            f"Response:\n{content}"
-        ) from e
+    # --------------------------------------------------------
+    # Normalize assessment lookup
+    # --------------------------------------------------------
 
-    try:
-        return SkillGapResult.model_validate(data)
+    assessment_map = {}
 
-    except Exception as e:
-        raise ValueError(
-            "LLM output does not match " "SkillGapResult schema.\n\n" f"Data:\n{data}"
-        ) from e
+    for assessment in skill_assessments:
+
+        skill_name = assessment.skill.strip().lower()
+
+        assessment_map[skill_name] = assessment
+
+    # --------------------------------------------------------
+    # Transferable skills lookup
+    #
+    # Used only as supporting context.
+    # It does NOT change current_level.
+    # --------------------------------------------------------
+
+    transferable_names = {skill.skill.strip().lower() for skill in transferable_skills}
+
+    skill_gaps = []
+
+    # --------------------------------------------------------
+    # Analyze EVERY required skill
+    # --------------------------------------------------------
+
+    for required in required_skills:
+
+        skill_name = required.skill
+
+        required_level = required.required_level
+
+        assessment = assessment_map.get(skill_name.strip().lower())
+
+        # ----------------------------------------------------
+        # No assessment found
+        # ----------------------------------------------------
+
+        if assessment is None:
+
+            current_level = "unknown"
+
+            status = "assessment_needed"
+
+            explanation = (
+                "No current assessment evidence is available "
+                "for this skill, so the student's level cannot "
+                "be reliably determined."
+            )
+
+        else:
+
+            current_level = assessment.current_level
+
+            # ------------------------------------------------
+            # UNKNOWN
+            # ------------------------------------------------
+
+            if current_level == "unknown":
+
+                status = "assessment_needed"
+
+                explanation = (
+                    "The student's current level could not be "
+                    "established from the available evidence. "
+                    "Additional assessment is needed before "
+                    "classifying this as a confirmed skill gap."
+                )
+
+            else:
+
+                current_score = LEVEL_ORDER[current_level]
+                required_score = LEVEL_ORDER[required_level]
+
+                # --------------------------------------------
+                # REQUIREMENT MET
+                # --------------------------------------------
+
+                if current_score >= required_score:
+
+                    status = "no_gap"
+
+                    explanation = (
+                        f"The assessed level is "
+                        f"{current_level}, which meets or "
+                        f"exceeds the required level of "
+                        f"{required_level}."
+                    )
+
+                # --------------------------------------------
+                # ONE LEVEL BELOW
+                # --------------------------------------------
+
+                elif required_score - current_score == 1:
+
+                    status = "small_gap"
+
+                    explanation = (
+                        f"The assessed level is "
+                        f"{current_level}, one level below "
+                        f"the required {required_level} level. "
+                        f"This indicates a relatively small "
+                        f"development gap."
+                    )
+
+                # --------------------------------------------
+                # SUBSTANTIAL GAP
+                # --------------------------------------------
+
+                else:
+
+                    status = "actual_gap"
+
+                    explanation = (
+                        f"The assessed level is "
+                        f"{current_level}, substantially below "
+                        f"the required {required_level} level. "
+                        f"This skill should be prioritized for "
+                        f"development."
+                    )
+
+        # ----------------------------------------------------
+        # Add transferable context
+        # ----------------------------------------------------
+
+        if skill_name.strip().lower() in transferable_names and status != "no_gap":
+
+            explanation += (
+                " Related transferable experience may provide "
+                "a useful foundation for developing this skill."
+            )
+
+        # ----------------------------------------------------
+        # Create validated result
+        # ----------------------------------------------------
+
+        skill_gaps.append(
+            {
+                "skill": skill_name,
+                "current_level": current_level,
+                "required_level": required_level,
+                "status": status,
+                "explanation": explanation,
+            }
+        )
+
+    # --------------------------------------------------------
+    # Final result
+    # --------------------------------------------------------
+
+    result = SkillGapResult(
+        direction=direction,
+        skill_gaps=skill_gaps,
+    )
+
+    print(
+        f"[STAGE 5] Completed deterministic Skill Gap Analysis. "
+        f"Skills analyzed: {len(skill_gaps)}",
+        flush=True,
+    )
+
+    return result
 
 
 # ============================================================
@@ -1109,6 +1344,11 @@ Use only the information provided above.
 Return ONLY valid JSON.
 """
 
+    print(
+        "\n[STAGE 6] Calling OpenAI for Transition Roadmap...",
+        flush=True,
+    )
+
     response = safe_chat_completion(
         model=SKILL_GAP_MODEL,
         reasoning_effort="none",
@@ -1122,13 +1362,49 @@ Return ONLY valid JSON.
                 "content": user_prompt,
             },
         ],
-        max_completion_tokens=5000,
+        max_completion_tokens=4000,
         response_format={
             "type": "json_object",
         },
     )
 
-    content = response.choices[0].message.content.strip()
+    print(
+        "[STAGE 6] OpenAI returned Transition Roadmap response.",
+        flush=True,
+    )
+
+    if not response.choices:
+        raise ValueError("Stage 6 Transition Roadmap: " "OpenAI returned no choices.")
+
+    finish_reason = getattr(
+        response.choices[0],
+        "finish_reason",
+        None,
+    )
+
+    content = response.choices[0].message.content
+
+    print(
+        f"[STAGE 6] Finish reason: {finish_reason}",
+        flush=True,
+    )
+
+    if not content:
+        raise ValueError(
+            "Stage 6 Transition Roadmap: " "OpenAI returned empty content."
+        )
+
+    content = content.strip()
+
+    if finish_reason in (
+        "length",
+        "max_tokens",
+        "MAX_TOKENS",
+    ):
+        raise ValueError(
+            "Stage 6 Transition Roadmap was truncated "
+            "because the token limit was reached."
+        )
 
     try:
         data = parse_json_from_llm(content)
