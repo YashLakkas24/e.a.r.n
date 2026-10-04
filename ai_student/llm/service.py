@@ -42,9 +42,8 @@ from ai_student.career_pivot.schemas import (
 # OPENAI MODEL CONFIGURATION
 # ============================================================
 
-DEFAULT_MODEL = os.getenv("AI_MODEL", "gpt-5.4-mini")
-
-SKILL_GAP_MODEL = os.getenv("SKILL_GAP_MODEL", "gpt-5.4-mini")
+DEFAULT_MODEL = os.getenv("AI_MODEL", "gpt-5-nano")
+SKILL_GAP_MODEL = os.getenv("SKILL_GAP_MODEL", DEFAULT_MODEL)
 
 VALID_MODELS = [
     DEFAULT_MODEL,

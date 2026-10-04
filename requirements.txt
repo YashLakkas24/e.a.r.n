@@ -10,6 +10,7 @@ psycopg2-binary==2.9.12
 
 python-multipart
 pypdf
+supabase
 
 strands-agents[openai]==1.55.1
 strands-agents-tools==0.8.8
@@ -18,4 +19,3 @@ numpy
 pytesseract
 Pillow
 pdf2image
-supabase
