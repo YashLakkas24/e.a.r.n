@@ -45,7 +45,7 @@ function StudentRoadmap() {
   const [roadmapData, setRoadmapData] = useState(null);
   const [directions, setDirections] = useState([]);
   const [selectedDirection, setSelectedDirection] = useState(
-    location.state?.direction || null
+    location.state?.direction || null,
   );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -61,6 +61,28 @@ function StudentRoadmap() {
   };
 
   const studentId = getStudentId();
+
+  const waitForRoadmap = async (direction) => {
+    for (let i = 0; i < 30; i++) {
+      const res = await getStudentRoadmap(studentId, direction);
+
+      if (res.status === "completed" && res.has_analysis) {
+        return res;
+      }
+
+      if (res.status === "missing") {
+        throw new Error(res.detail || "Roadmap analysis is unavailable.");
+      }
+
+      if (res.status === "error") {
+        throw new Error(res.detail || "Roadmap analysis failed.");
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+
+    throw new Error("Roadmap analysis timed out.");
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -85,13 +107,13 @@ function StudentRoadmap() {
           selectedDirection ||
           (availableDirs.length > 0 ? availableDirs[0].name : null);
 
-        const res = await getStudentRoadmap(studentId, targetDir);
+        const res = await waitForRoadmap(targetDir);
 
         if (isMounted) {
           if (res.has_analysis === false) {
             setError(
               res.detail ||
-                "Interest profile is not ready yet. Please complete the Interest+ discovery quiz first."
+                "Interest profile is not ready yet. Please complete the Interest+ discovery quiz first.",
             );
             setRoadmapData(null);
           } else {
@@ -105,7 +127,7 @@ function StudentRoadmap() {
         if (isMounted) {
           setError(
             err.message ||
-              "Failed to load AI Roadmap. Please check backend connection."
+              "Failed to load AI Roadmap. Please check backend connection.",
           );
         }
       } finally {
@@ -126,7 +148,7 @@ function StudentRoadmap() {
       setSelectedDirection(dirName);
       setLoading(true);
       setError("");
-      const res = await getStudentRoadmap(studentId, dirName);
+      const res = await waitForRoadmap(dirName);
       if (res.has_analysis) {
         setRoadmapData(res);
       } else {
@@ -140,16 +162,38 @@ function StudentRoadmap() {
   };
 
   const handleRefresh = async () => {
+    const direction = selectedDirection || roadmapData?.direction;
+
+    if (!direction) {
+      setError("No career direction is selected.");
+      return;
+    }
+
     try {
       setRefreshing(true);
       setError("");
-      const res = await getStudentRoadmap(
-        studentId,
-        selectedDirection || roadmapData?.direction,
-        true
-      );
-      if (res.has_analysis) {
-        setRoadmapData(res);
+
+      // Start a new analysis
+      const initial = await getStudentRoadmap(studentId, direction, true);
+
+      if (initial.status === "processing") {
+        const finalRes = await waitForRoadmap(direction);
+
+        if (finalRes.has_analysis) {
+          setRoadmapData(finalRes);
+        } else {
+          setError(
+            finalRes.detail || "Roadmap analysis could not be completed.",
+          );
+        }
+
+        return;
+      }
+
+      if (initial.has_analysis) {
+        setRoadmapData(initial);
+      } else {
+        setError(initial.detail || "Roadmap analysis is unavailable.");
       }
     } catch (err) {
       setError(err.message || "Failed to refresh AI roadmap.");
@@ -360,15 +404,14 @@ function StudentRoadmap() {
           <div className="timeline-steps">
             {steps.map((step, idx) => {
               const stepNumber = step.step || idx + 1;
-              const paddedNumber = stepNumber < 10 ? `0${stepNumber}` : stepNumber;
+              const paddedNumber =
+                stepNumber < 10 ? `0${stepNumber}` : stepNumber;
 
               return (
                 <div key={idx} className="timeline-item">
                   <div className="timeline-marker">
                     <div className="marker-number">{paddedNumber}</div>
-                    {idx < steps.length - 1 && (
-                      <div className="marker-line" />
-                    )}
+                    {idx < steps.length - 1 && <div className="marker-line" />}
                   </div>
 
                   <div className="timeline-card">
@@ -405,8 +448,8 @@ function StudentRoadmap() {
             <span className="roadmap-eyebrow">CONTINUE YOUR JOURNEY</span>
             <h2>Track Your Growth</h2>
             <p>
-              Revisit your Interest Profile or Skill Gaps anytime as you complete
-              projects and learn new skills.
+              Revisit your Interest Profile or Skill Gaps anytime as you
+              complete projects and learn new skills.
             </p>
           </div>
 

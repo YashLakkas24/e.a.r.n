@@ -1007,10 +1007,10 @@ def get_roadmap(
     student_id: str,
     direction: str | None = None,
     force_refresh: bool = False,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_student),
 ):
-
     verify_student_access(student_id, current_user)
 
     (
@@ -1032,7 +1032,6 @@ def get_roadmap(
     target_direction = (direction or "").strip()
 
     if not target_direction:
-
         potential_directions = (
             parse_json_safely(latest_analysis.potential_directions) or []
         )
@@ -1058,6 +1057,7 @@ def get_roadmap(
 
     status = _career_analysis_status(cached)
 
+    # Completed and no refresh required
     if status == "completed" and not force_refresh:
         return {
             "has_analysis": True,
@@ -1070,14 +1070,55 @@ def get_roadmap(
             "roadmap": parse_json_safely(cached.roadmap) or [],
         }
 
-    return {
-        "has_analysis": False,
-        "status": status,
-        "student_id": student_id,
-        "direction": target_direction,
-        "detail": "Roadmap analysis is still being generated.",
-        "roadmap": [],
-    }
+    # Already processing
+    if status == "processing" and not force_refresh:
+        return JSONResponse(
+            status_code=202,
+            content={
+                "has_analysis": False,
+                "status": "processing",
+                "student_id": student_id,
+                "direction": target_direction,
+                "message": "Roadmap analysis is being generated.",
+            },
+        )
+
+    # Create/cache record
+    if not cached:
+        cached = CareerPivotAnalysis(
+            student_id=student_id,
+            interest=latest_analysis.interest,
+            direction=target_direction,
+        )
+        db.add(cached)
+
+    cached.interest = latest_analysis.interest
+    cached.required_skills = None
+    cached.skill_assessments = None
+    cached.transferable_skills = None
+    cached.skill_gaps = None
+    cached.transition_difficulty = None
+    cached.transition_reason = "__PROCESSING__"
+    cached.roadmap = None
+
+    db.commit()
+
+    background_tasks.add_task(
+        _run_career_pivot_background,
+        student_id,
+        target_direction,
+    )
+
+    return JSONResponse(
+        status_code=202,
+        content={
+            "has_analysis": False,
+            "status": "processing",
+            "student_id": student_id,
+            "direction": target_direction,
+            "message": "Roadmap analysis started.",
+        },
+    )
 
 
 # ============================================================
@@ -1089,16 +1130,28 @@ def get_roadmap(
 def trigger_career_pivot_analysis(
     student_id: str,
     body: CareerDirectionAnalyzeRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_student),
 ):
-
     verify_student_access(student_id, current_user)
 
     target_direction = body.direction.strip()
 
     if not target_direction:
-        raise HTTPException(status_code=400, detail="Career direction is required.")
+        raise HTTPException(
+            status_code=400,
+            detail="Career direction is required.",
+        )
+
+    return get_skill_gap(
+        student_id=student_id,
+        direction=target_direction,
+        force_refresh=body.force_refresh,
+        background_tasks=background_tasks,
+        db=db,
+        current_user=current_user,
+    )
 
     return get_skill_gap(
         student_id=student_id,
