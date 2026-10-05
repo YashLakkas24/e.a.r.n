@@ -55,7 +55,7 @@ function SkillGap() {
   const [gapData, setGapData] = useState(null);
   const [directions, setDirections] = useState([]);
   const [selectedDirection, setSelectedDirection] = useState(
-    location.state?.direction || null
+    location.state?.direction || null,
   );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -99,12 +99,29 @@ function SkillGap() {
 
         // Fetch skill gap analysis
         const res = await getStudentSkillGap(studentId, targetDir);
+        if (res.status === "processing") {
+          // poll again after 2 seconds
+        }
+
+        const waitForSkillGap = async (direction) => {
+          for (let i = 0; i < 30; i++) {
+            const res = await getStudentSkillGap(studentId, direction);
+
+            if (res.status !== "processing") {
+              return res;
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+          }
+
+          throw new Error("Skill gap analysis timed out.");
+        };
 
         if (isMounted) {
           if (res.has_analysis === false) {
             setError(
               res.detail ||
-                "Interest analysis is not available yet. Please complete the Interest+ discovery quiz first."
+                "Interest analysis is not available yet. Please complete the Interest+ discovery quiz first.",
             );
             setGapData(null);
           } else {
@@ -118,7 +135,7 @@ function SkillGap() {
         if (isMounted) {
           setError(
             err.message ||
-              "Failed to load Skill Gap Analysis. Please ensure backend is running."
+              "Failed to load Skill Gap Analysis. Please ensure backend is running.",
           );
         }
       } finally {
@@ -161,7 +178,7 @@ function SkillGap() {
       const res = await getStudentSkillGap(
         studentId,
         selectedDirection || gapData?.direction,
-        true
+        true,
       );
       if (res.has_analysis) {
         setGapData(res);
@@ -194,8 +211,8 @@ function SkillGap() {
             <div className="ai-spinner" />
             <h2>Comparing Skills with Industry Requirements...</h2>
             <p>
-              The AI is evaluating your Interest Profile against industry-standard
-              capabilities.
+              The AI is evaluating your Interest Profile against
+              industry-standard capabilities.
             </p>
           </section>
         </main>
@@ -251,10 +268,10 @@ function SkillGap() {
   const skillGaps = gapData?.skill_gaps || [];
 
   const actualGapsCount = skillGaps.filter(
-    (g) => g.status === "actual_gap"
+    (g) => g.status === "actual_gap",
   ).length;
   const metRequirementsCount = skillGaps.filter(
-    (g) => g.status === "no_gap"
+    (g) => g.status === "no_gap",
   ).length;
 
   return (
@@ -407,7 +424,8 @@ function SkillGap() {
             <div>
               <h2>Identified Skill Gaps</h2>
               <span>
-                Comparison of your current skill level against target requirement
+                Comparison of your current skill level against target
+                requirement
               </span>
             </div>
           </div>

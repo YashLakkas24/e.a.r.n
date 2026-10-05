@@ -1,5 +1,6 @@
 import { getAuth } from "firebase/auth";
 import app from "../firebase";
+
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 const auth = getAuth(app);
 async function getAuthHeaders(includeJson = false) {
@@ -370,7 +371,7 @@ export async function getStudentSkillGap(
     headers: await getAuthHeaders(),
   });
 
-  if (!response.ok) {
+  if (!response.ok && response.status !== 202) {
     const errorText = await response.text();
     throw new Error(
       `Failed to fetch skill gap analysis (${response.status}): ${errorText}`,
@@ -405,7 +406,7 @@ export async function getStudentRoadmap(
     headers: await getAuthHeaders(),
   });
 
-  if (!response.ok) {
+  if (!response.ok && response.status !== 202) {
     const errorText = await response.text();
     throw new Error(
       `Failed to fetch student roadmap (${response.status}): ${errorText}`,

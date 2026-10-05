@@ -225,6 +225,8 @@ def validate_uploaded_csv(df):
 
         raise HTTPException(status_code=400, detail="Some students are missing name.")
 
+    df["student_id"] = df["student_id"].astype(str).str.strip().str.upper()
+
     # -----------------------------------------------------
     # DUPLICATE STUDENT IDs
     # -----------------------------------------------------
@@ -399,11 +401,13 @@ async def upload_student_csv(
                         row["extracurricular_count"]
                     )
 
+                    existing_student.firebase_uid = student_id.upper()
                 else:
 
                     # Create new student
                     new_student = Student(
-                        student_id=student_id,
+                        student_id=student_id.upper(),
+                        firebase_uid=student_id.upper(),
                         name=str(row["name"]).strip(),
                         roll_number=student_id,
                         attendance=int(row["attendance"]),

@@ -58,6 +58,7 @@ def create_students():
 
                 # Update existing student
                 existing_student.name = name
+                existing_student.firebase_uid = student_id.upper()
                 existing_student.roll_number = student_id[-3:]
                 existing_student.attendance = int(row["attendance"])
                 existing_student.previous_sem_cgpa = float(row["previous_sem_cgpa"])
@@ -71,7 +72,8 @@ def create_students():
             else:
 
                 student = Student(
-                    student_id=student_id,
+                    student_id=student_id.upper(),
+                    firebase_uid=student_id.upper(),
                     name=name,
                     roll_number=student_id[-3:],
                     year=3,
@@ -100,5 +102,6 @@ def create_students():
     finally:
         db.close()
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     create_students()

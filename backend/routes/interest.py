@@ -23,7 +23,12 @@ from ai_student.career_pivot.pipeline import (
     discover_career_directions,
     analyze_selected_direction,
 )
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+)
 from fastapi.responses import JSONResponse
 
 router = APIRouter(prefix="/api/students", tags=["Interest+"])
@@ -848,8 +853,8 @@ def get_skill_gap(
     student_id: str,
     direction: str | None = None,
     force_refresh: bool = False,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(require_student),
 ):
 
     verify_student_access(student_id, current_user)
@@ -1050,67 +1055,16 @@ def trigger_career_pivot_analysis(
 
     verify_student_access(student_id, current_user)
 
-    target_direction = (direction or "").strip()
+    target_direction = body.direction.strip()
 
     if not target_direction:
+        raise HTTPException(status_code=400, detail="Career direction is required.")
 
-        (
-            latest_analysis,
-            analysis_dict,
-            existing_skills,
-            previous_interests,
-        ) = _get_student_context(student_id, db)
-
-        if not latest_analysis:
-            return {
-                "has_analysis": False,
-                "student_id": student_id,
-                "roadmap": [],
-                "detail": ("Roadmap unavailable. " "Complete Interest+ first."),
-            }
-
-        potential_directions = (
-            parse_json_safely(latest_analysis.potential_directions) or []
-        )
-
-        if potential_directions:
-            first = potential_directions[0]
-
-            target_direction = (
-                first if isinstance(first, str) else first.get("name", "")
-            )
-
-        else:
-            target_direction = latest_analysis.interest
-
-    cached = (
-        db.query(CareerPivotAnalysis)
-        .filter(
-            CareerPivotAnalysis.student_id == student_id,
-            CareerPivotAnalysis.direction == target_direction,
-        )
-        .first()
+    return get_skill_gap(
+        student_id=student_id,
+        direction=target_direction,
+        force_refresh=body.force_refresh,
+        background_tasks=BackgroundTasks(),
+        db=db,
+        current_user=current_user,
     )
-
-    status = _career_analysis_status(cached)
-
-    if status != "completed":
-
-        return {
-            "has_analysis": False,
-            "status": status,
-            "student_id": student_id,
-            "direction": target_direction,
-            "roadmap": [],
-        }
-
-    return {
-        "has_analysis": True,
-        "status": "completed",
-        "student_id": student_id,
-        "interest": cached.interest,
-        "direction": cached.direction,
-        "transition_difficulty": cached.transition_difficulty,
-        "transition_reason": cached.transition_reason,
-        "roadmap": parse_json_safely(cached.roadmap) or [],
-    }
