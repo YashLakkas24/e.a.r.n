@@ -71,6 +71,8 @@ class Student(Base):
 
     interest_embedding = Column(JSON, nullable=True)
 
+    firebase_uid = Column(String, unique=True, nullable=True, index=True)
+
 
 # ============================================================
 # STUDENT INTEREST

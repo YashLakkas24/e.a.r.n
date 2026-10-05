@@ -23,6 +23,8 @@ from ai_student.career_pivot.pipeline import (
     discover_career_directions,
     analyze_selected_direction,
 )
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi.responses import JSONResponse
 
 router = APIRouter(prefix="/api/students", tags=["Interest+"])
 
@@ -620,14 +622,156 @@ def _get_student_context(student_id: str, db: Session):
     return (latest_analysis, analysis_dict, existing_skills, previous_interests)
 
 
+def _career_analysis_status(cached):
+    if not cached:
+        return "missing"
+
+    if cached.transition_reason == "__PROCESSING__":
+        return "processing"
+
+    if isinstance(
+        cached.transition_reason, str
+    ) and cached.transition_reason.startswith("__ERROR__:"):
+        return "error"
+
+    required_fields = [
+        cached.required_skills,
+        cached.skill_assessments,
+        cached.transferable_skills,
+        cached.skill_gaps,
+        cached.transition_difficulty,
+        cached.transition_reason,
+        cached.roadmap,
+    ]
+
+    if all(value not in (None, "") for value in required_fields):
+        return "completed"
+
+    return "incomplete"
+
+
+def _career_error_message(cached):
+    if not cached or not isinstance(cached.transition_reason, str):
+        return "Career analysis failed."
+
+    return (
+        cached.transition_reason.replace(
+            "__ERROR__:",
+            "",
+            1,
+        ).strip()
+        or "Career analysis failed."
+    )
+
+
+def _run_career_pivot_background(
+    student_id: str,
+    target_direction: str,
+):
+    db = SessionLocal()
+
+    try:
+        latest_analysis, analysis_dict, existing_skills, previous_interests = (
+            _get_student_context(student_id, db)
+        )
+
+        if not latest_analysis:
+            return
+
+        print(
+            f"[CAREER PIVOT BACKGROUND] Starting | "
+            f"student={student_id} | direction={target_direction}",
+            flush=True,
+        )
+
+        analysis_result = analyze_selected_direction(
+            selected_direction=target_direction,
+            existing_skills=existing_skills,
+            previous_interests=previous_interests,
+            interest_analysis=analysis_dict,
+        )
+
+        cached = (
+            db.query(CareerPivotAnalysis)
+            .filter(
+                CareerPivotAnalysis.student_id == student_id,
+                CareerPivotAnalysis.direction == target_direction,
+            )
+            .first()
+        )
+
+        if not cached:
+            cached = CareerPivotAnalysis(
+                student_id=student_id,
+                interest=latest_analysis.interest,
+                direction=target_direction,
+            )
+            db.add(cached)
+
+        cached.interest = latest_analysis.interest
+        cached.required_skills = json.dumps(
+            [s.model_dump() for s in analysis_result.required_skills]
+        )
+        cached.skill_assessments = json.dumps(
+            [a.model_dump() for a in analysis_result.skill_assessments]
+        )
+        cached.transferable_skills = json.dumps(
+            [t.model_dump() for t in analysis_result.transferable_skills]
+        )
+        cached.skill_gaps = json.dumps(
+            [g.model_dump() for g in analysis_result.skill_gaps]
+        )
+        cached.transition_difficulty = analysis_result.transition_difficulty
+        cached.transition_reason = analysis_result.transition_reason
+        cached.roadmap = json.dumps([r.model_dump() for r in analysis_result.roadmap])
+
+        db.commit()
+
+        print(
+            f"[CAREER PIVOT BACKGROUND] Completed | "
+            f"student={student_id} | direction={target_direction}",
+            flush=True,
+        )
+
+    except Exception as e:
+        print(
+            f"[CAREER PIVOT BACKGROUND] Failed | " f"{type(e).__name__}: {e}",
+            flush=True,
+        )
+
+        try:
+            cached = (
+                db.query(CareerPivotAnalysis)
+                .filter(
+                    CareerPivotAnalysis.student_id == student_id,
+                    CareerPivotAnalysis.direction == target_direction,
+                )
+                .first()
+            )
+
+            if cached:
+                cached.transition_difficulty = None
+                cached.transition_reason = f"__ERROR__:{type(e).__name__}: {e}"
+                db.commit()
+
+        except Exception:
+            db.rollback()
+
+    finally:
+        db.close()
+
+
 # ============================================================
 # DISCOVER CAREER DIRECTIONS
 # ============================================================
 
 
-@router.get("/{student_id}/career-directions")
-def get_career_directions(
+@router.get("/{student_id}/skill-gap")
+def get_skill_gap(
     student_id: str,
+    direction: str | None = None,
+    force_refresh: bool = False,
+    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_student),
 ):
@@ -746,6 +890,74 @@ def get_skill_gap(
             CareerPivotAnalysis.direction == target_direction,
         )
         .first()
+    )
+
+    status = _career_analysis_status(cached)
+
+    if status == "completed" and not force_refresh:
+        return {
+            "has_analysis": True,
+            "status": "completed",
+            "student_id": student_id,
+            "interest": cached.interest,
+            "direction": cached.direction,
+            "required_skills": parse_json_safely(cached.required_skills) or [],
+            "skill_assessments": parse_json_safely(cached.skill_assessments) or [],
+            "transferable_skills": parse_json_safely(cached.transferable_skills) or [],
+            "skill_gaps": parse_json_safely(cached.skill_gaps) or [],
+            "transition_difficulty": cached.transition_difficulty,
+            "transition_reason": cached.transition_reason,
+            "roadmap": parse_json_safely(cached.roadmap) or [],
+        }
+
+    if status == "processing":
+        return JSONResponse(
+            status_code=202,
+            content={
+                "has_analysis": False,
+                "status": "processing",
+                "student_id": student_id,
+                "interest": latest_analysis.interest,
+                "direction": target_direction,
+                "message": "Career analysis is being generated.",
+            },
+        )
+
+    if not cached:
+        cached = CareerPivotAnalysis(
+            student_id=student_id,
+            interest=latest_analysis.interest,
+            direction=target_direction,
+        )
+        db.add(cached)
+
+    cached.interest = latest_analysis.interest
+    cached.required_skills = None
+    cached.skill_assessments = None
+    cached.transferable_skills = None
+    cached.skill_gaps = None
+    cached.transition_difficulty = None
+    cached.transition_reason = "__PROCESSING__"
+    cached.roadmap = None
+
+    db.commit()
+
+    background_tasks.add_task(
+        _run_career_pivot_background,
+        student_id,
+        target_direction,
+    )
+
+    return JSONResponse(
+        status_code=202,
+        content={
+            "has_analysis": False,
+            "status": "processing",
+            "student_id": student_id,
+            "interest": latest_analysis.interest,
+            "direction": target_direction,
+            "message": "Career analysis started.",
+        },
     )
 
     if cached and not force_refresh:
@@ -897,4 +1109,3 @@ def trigger_career_pivot_analysis(
         db=db,
         current_user=current_user,
     )
-

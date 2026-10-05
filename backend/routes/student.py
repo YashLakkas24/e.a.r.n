@@ -48,13 +48,19 @@ def get_student(
     current_user=Depends(require_student),
 ):
 
-    if current_user.get("uid") != student_id:
+    student = db.query(Student).filter(Student.student_id == student_id).first()
+
+    if not student:
+        raise HTTPException(
+            status_code=404,
+            detail="Student not found",
+        )
+
+    if student.firebase_uid != current_user.get("uid"):
         raise HTTPException(
             status_code=403,
             detail="You can only access your own student profile",
         )
-
-    student = db.query(Student).filter(Student.student_id == student_id).first()
 
     if not student:
         raise HTTPException(
@@ -86,14 +92,19 @@ def get_student_preferences(
     current_user=Depends(require_student),
 ):
 
-    if current_user.get("uid") != student_id:
-        raise HTTPException(
-            status_code=403,
-            detail="You can only access your own preferences",
-        )
-
     student = db.query(Student).filter(Student.student_id == student_id).first()
 
+    if not student:
+        raise HTTPException(
+            status_code=404,
+            detail="Student not found",
+        )
+
+    if student.firebase_uid != current_user.get("uid"):
+        raise HTTPException(
+            status_code=403,
+            detail="You can only access your own student profile",
+        )
     if not student:
         raise HTTPException(
             status_code=404,
@@ -117,13 +128,19 @@ def update_student_preferences(
     current_user=Depends(require_student),
 ):
 
-    if current_user.get("uid") != student_id:
+    student = db.query(Student).filter(Student.student_id == student_id).first()
+
+    if not student:
         raise HTTPException(
-            status_code=403,
-            detail="You can only update your own preferences",
+            status_code=404,
+            detail="Student not found",
         )
 
-    student = db.query(Student).filter(Student.student_id == student_id).first()
+    if student.firebase_uid != current_user.get("uid"):
+        raise HTTPException(
+            status_code=403,
+            detail="You can only access your own student profile",
+        )
 
     if not student:
         raise HTTPException(

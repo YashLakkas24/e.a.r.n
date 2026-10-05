@@ -3,6 +3,8 @@ import sys
 import os
 import tempfile
 from io import BytesIO
+from database import SessionLocal
+from models import Student
 
 import pandas as pd
 
@@ -430,6 +432,99 @@ async def upload_student_csv(
             temp_path,
             UPLOADED_CSV_PATH
         )
+        # =========================================================
+        # SYNC UPLOADED STUDENTS INTO DATABASE
+        # =========================================================
+
+        db = SessionLocal()
+
+        try:
+
+            for _, row in df.iterrows():
+
+                student_id = str(row["student_id"]).strip()
+
+                existing_student = (
+                    db.query(Student)
+                    .filter(
+                        Student.student_id == student_id
+                    )
+                    .first()
+                )
+
+                if existing_student:
+
+                    # Update existing student
+                    existing_student.name = str(
+                        row["name"]
+                    ).strip()
+
+                    existing_student.roll_number = str(
+                        row["student_id"]
+                    ).strip()
+
+                    existing_student.attendance = int(
+                        row["attendance"]
+                    )
+
+                    existing_student.previous_sem_cgpa = float(
+                        row["previous_sem_cgpa"]
+                    )
+
+                    existing_student.extracurricular_count = int(
+                        row["extracurricular_count"]
+                    )
+
+                else:
+
+                    # Create new student
+                    new_student = Student(
+                        student_id=student_id,
+                        name=str(row["name"]).strip(),
+                        roll_number=student_id,
+                        attendance=int(row["attendance"]),
+                        previous_sem_cgpa=float(
+                            row["previous_sem_cgpa"]
+                        ),
+                        extracurricular_count=int(
+                            row["extracurricular_count"]
+                        ),
+                        year=None,
+                        branch=None,
+                        preferences="",
+                        interests=[],
+                    )
+
+                    db.add(new_student)
+
+            db.commit()
+
+            print(
+                f"Database student sync completed: {len(df)} students",
+                flush=True
+            )
+
+        except Exception as e:
+
+            db.rollback()
+
+            print(
+                "Student database sync failed:",
+                repr(e),
+                flush=True
+            )
+
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "CSV uploaded, but students could not "
+                    "be synchronized with the database."
+                )
+            )
+
+        finally:
+
+            db.close()
 
         print("================================")
         print(
