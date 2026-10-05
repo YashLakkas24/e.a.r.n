@@ -1152,12 +1152,3 @@ def trigger_career_pivot_analysis(
         db=db,
         current_user=current_user,
     )
-
-    return get_skill_gap(
-        student_id=student_id,
-        direction=target_direction,
-        force_refresh=body.force_refresh,
-        background_tasks=BackgroundTasks(),
-        db=db,
-        current_user=current_user,
-    )
