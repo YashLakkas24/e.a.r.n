@@ -1,7 +1,12 @@
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+)
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from database import SessionLocal
@@ -22,12 +27,6 @@ from ai_student.interest_analysis.analyzer import analyze_interest
 from ai_student.career_pivot.pipeline import (
     discover_career_directions,
     analyze_selected_direction,
-)
-from fastapi import (
-    APIRouter,
-    BackgroundTasks,
-    Depends,
-    HTTPException,
 )
 from fastapi.responses import JSONResponse
 
@@ -855,6 +854,7 @@ def get_skill_gap(
     force_refresh: bool = False,
     background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
+    current_user: dict = Depends(require_student),
 ):
 
     verify_student_access(student_id, current_user)
@@ -997,6 +997,11 @@ def get_skill_gap(
 # ============================================================
 
 
+# ============================================================
+# GET ROADMAP
+# ============================================================
+
+
 @router.get("/{student_id}/roadmap")
 def get_roadmap(
     student_id: str,
@@ -1008,35 +1013,70 @@ def get_roadmap(
 
     verify_student_access(student_id, current_user)
 
-    # Reuse the same pipeline which produces
-    # both skill gap and roadmap.
+    (
+        latest_analysis,
+        analysis_dict,
+        existing_skills,
+        previous_interests,
+    ) = _get_student_context(student_id, db)
 
-    gap_data = get_skill_gap(
-        student_id=student_id,
-        direction=direction,
-        force_refresh=force_refresh,
-        db=db,
-        current_user=current_user,
-    )
-
-    if not gap_data.get("has_analysis"):
+    if not latest_analysis:
         return {
             "has_analysis": False,
+            "status": "missing",
             "student_id": student_id,
-            "detail": gap_data.get(
-                "detail", "Roadmap unavailable. Complete Interest+ first."
-            ),
+            "detail": "Complete Interest+ first.",
             "roadmap": [],
         }
 
+    target_direction = (direction or "").strip()
+
+    if not target_direction:
+
+        potential_directions = (
+            parse_json_safely(latest_analysis.potential_directions) or []
+        )
+
+        if potential_directions:
+            first = potential_directions[0]
+
+            target_direction = (
+                first if isinstance(first, str) else first.get("name", "")
+            )
+
+        else:
+            target_direction = latest_analysis.interest
+
+    cached = (
+        db.query(CareerPivotAnalysis)
+        .filter(
+            CareerPivotAnalysis.student_id == student_id,
+            CareerPivotAnalysis.direction == target_direction,
+        )
+        .first()
+    )
+
+    status = _career_analysis_status(cached)
+
+    if status == "completed" and not force_refresh:
+        return {
+            "has_analysis": True,
+            "status": "completed",
+            "student_id": student_id,
+            "interest": cached.interest,
+            "direction": cached.direction,
+            "transition_difficulty": cached.transition_difficulty,
+            "transition_reason": cached.transition_reason,
+            "roadmap": parse_json_safely(cached.roadmap) or [],
+        }
+
     return {
-        "has_analysis": True,
+        "has_analysis": False,
+        "status": status,
         "student_id": student_id,
-        "interest": gap_data.get("interest"),
-        "direction": gap_data.get("direction"),
-        "transition_difficulty": gap_data.get("transition_difficulty"),
-        "transition_reason": gap_data.get("transition_reason"),
-        "roadmap": gap_data.get("roadmap") or [],
+        "direction": target_direction,
+        "detail": "Roadmap analysis is still being generated.",
+        "roadmap": [],
     }
 
 

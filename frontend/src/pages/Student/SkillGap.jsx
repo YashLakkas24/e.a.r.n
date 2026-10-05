@@ -72,6 +72,19 @@ function SkillGap() {
 
   const studentId = getStudentId();
 
+  const waitForSkillGap = async (direction) => {
+  for (let i = 0; i < 30; i++) {
+    const res = await getStudentSkillGap(studentId, direction);
+
+    if (res.status !== "processing") {
+      return res;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+
+  throw new Error("Skill gap analysis timed out.");
+};
   // Load directions list and initial skill gap
   useEffect(() => {
     let isMounted = true;
@@ -83,11 +96,16 @@ function SkillGap() {
 
         // Fetch directions
         let availableDirs = [];
+
         try {
           const dirRes = await getStudentCareerDirections(studentId);
+
           if (dirRes.has_analysis && Array.isArray(dirRes.directions)) {
             availableDirs = dirRes.directions;
-            if (isMounted) setDirections(availableDirs);
+
+            if (isMounted) {
+              setDirections(availableDirs);
+            }
           }
         } catch (e) {
           console.warn("Could not load career directions list:", e);
@@ -97,25 +115,8 @@ function SkillGap() {
           selectedDirection ||
           (availableDirs.length > 0 ? availableDirs[0].name : null);
 
-        // Fetch skill gap analysis
-        const res = await getStudentSkillGap(studentId, targetDir);
-        if (res.status === "processing") {
-          // poll again after 2 seconds
-        }
-
-        const waitForSkillGap = async (direction) => {
-          for (let i = 0; i < 30; i++) {
-            const res = await getStudentSkillGap(studentId, direction);
-
-            if (res.status !== "processing") {
-              return res;
-            }
-
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-          }
-
-          throw new Error("Skill gap analysis timed out.");
-        };
+        // Fetch skill gap analysis and wait if the backend is processing it
+        const res = await waitForSkillGap(targetDir);
 
         if (isMounted) {
           if (res.has_analysis === false) {
@@ -124,11 +125,15 @@ function SkillGap() {
                 "Interest analysis is not available yet. Please complete the Interest+ discovery quiz first.",
             );
             setGapData(null);
-          } else {
+          } else if (res.has_analysis) {
             setGapData(res);
+
             if (res.direction && !selectedDirection) {
               setSelectedDirection(res.direction);
             }
+          } else {
+            setError(res.detail || "Analysis unavailable.");
+            setGapData(null);
           }
         }
       } catch (err) {
@@ -139,7 +144,9 @@ function SkillGap() {
           );
         }
       } finally {
-        if (isMounted) setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
 
@@ -157,8 +164,9 @@ function SkillGap() {
       setSelectedDirection(dirName);
       setLoading(true);
       setError("");
-      const res = await getStudentSkillGap(studentId, dirName);
-      if (res.has_analysis) {
+      const res = await waitForSkillGap(dirName);
+
+if (res.has_analysis) {
         setGapData(res);
       } else {
         setError(res.detail || "Analysis unavailable for this direction.");
@@ -172,16 +180,37 @@ function SkillGap() {
 
   // Force re-analysis from AI
   const handleRefresh = async () => {
+    const direction = selectedDirection || gapData?.direction;
+
+    if (!direction) {
+      setError("No career direction is selected.");
+      return;
+    }
+
     try {
       setRefreshing(true);
       setError("");
-      const res = await getStudentSkillGap(
-        studentId,
-        selectedDirection || gapData?.direction,
-        true,
-      );
+
+      // force_refresh=true starts a new background analysis
+      const res = await getStudentSkillGap(studentId, direction, true);
+
+      // The backend returns 202/processing while the AI job runs.
+      if (res.status === "processing") {
+        const finalRes = await waitForSkillGap(direction);
+
+        if (finalRes.has_analysis) {
+          setGapData(finalRes);
+        } else {
+          setError(finalRes.detail || "Analysis unavailable.");
+        }
+
+        return;
+      }
+
       if (res.has_analysis) {
         setGapData(res);
+      } else {
+        setError(res.detail || "Analysis unavailable.");
       }
     } catch (err) {
       setError(err.message || "Failed to refresh AI analysis.");
