@@ -766,12 +766,10 @@ def _run_career_pivot_background(
 # ============================================================
 
 
-@router.get("/{student_id}/skill-gap")
-def get_skill_gap(
+@router.get("/{student_id}/career-directions")
+def get_career_directions(
     student_id: str,
-    direction: str | None = None,
     force_refresh: bool = False,
-    background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_student),
 ):
@@ -783,9 +781,12 @@ def get_skill_gap(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    latest_analysis, analysis_dict, existing_skills, previous_interests = (
-        _get_student_context(student_id, db)
-    )
+    (
+        latest_analysis,
+        analysis_dict,
+        existing_skills,
+        previous_interests,
+    ) = _get_student_context(student_id, db)
 
     if not latest_analysis:
         return {
@@ -797,18 +798,43 @@ def get_skill_gap(
             ),
         }
 
-    # Discover directions using the AI pipeline
+    # Use cached directions unless refresh is requested
+    cached_directions = parse_json_safely(latest_analysis.potential_directions) or []
+
+    if cached_directions and not force_refresh:
+
+        # Old format may be strings
+        directions = [
+            ({"name": d, "fit_score": None} if isinstance(d, str) else d)
+            for d in cached_directions
+        ]
+
+        return {
+            "has_analysis": True,
+            "student_id": student_id,
+            "interest": latest_analysis.interest,
+            "directions": directions,
+        }
+
+    # Generate directions
     result = discover_career_directions(
         existing_skills=existing_skills,
         previous_interests=previous_interests,
         interest_analysis=analysis_dict,
     )
 
+    directions = [direction.model_dump() for direction in result.directions]
+
+    # Cache them
+    latest_analysis.potential_directions = json.dumps(directions)
+
+    db.commit()
+
     return {
         "has_analysis": True,
         "student_id": student_id,
         "interest": latest_analysis.interest,
-        "directions": [direction.model_dump() for direction in result.directions],
+        "directions": directions,
     }
 
 
@@ -960,84 +986,6 @@ def get_skill_gap(
         },
     )
 
-    if cached and not force_refresh:
-
-        return {
-            "has_analysis": True,
-            "student_id": student_id,
-            "interest": cached.interest,
-            "direction": cached.direction,
-            "required_skills": parse_json_safely(cached.required_skills) or [],
-            "skill_assessments": parse_json_safely(cached.skill_assessments) or [],
-            "transferable_skills": parse_json_safely(cached.transferable_skills) or [],
-            "skill_gaps": parse_json_safely(cached.skill_gaps) or [],
-            "transition_difficulty": (cached.transition_difficulty),
-            "transition_reason": (cached.transition_reason),
-            "roadmap": parse_json_safely(cached.roadmap) or [],
-        }
-
-    # --------------------------------------------------------
-    # Run AI analysis for this direction
-    # --------------------------------------------------------
-
-    analysis_result = analyze_selected_direction(
-        selected_direction=target_direction,
-        existing_skills=existing_skills,
-        previous_interests=previous_interests,
-        interest_analysis=analysis_dict,
-    )
-
-    # --------------------------------------------------------
-    # Save to database
-    # --------------------------------------------------------
-
-    if not cached:
-
-        cached = CareerPivotAnalysis(
-            student_id=student_id,
-            interest=latest_analysis.interest,
-            direction=target_direction,
-        )
-
-        db.add(cached)
-
-    cached.required_skills = json.dumps(
-        [s.model_dump() for s in analysis_result.required_skills]
-    )
-
-    cached.skill_assessments = json.dumps(
-        [a.model_dump() for a in analysis_result.skill_assessments]
-    )
-
-    cached.transferable_skills = json.dumps(
-        [t.model_dump() for t in analysis_result.transferable_skills]
-    )
-
-    cached.skill_gaps = json.dumps([g.model_dump() for g in analysis_result.skill_gaps])
-
-    cached.transition_difficulty = analysis_result.transition_difficulty
-
-    cached.transition_reason = analysis_result.transition_reason
-
-    cached.roadmap = json.dumps([r.model_dump() for r in analysis_result.roadmap])
-
-    db.commit()
-    db.refresh(cached)
-
-    return {
-        "has_analysis": True,
-        "student_id": student_id,
-        "interest": cached.interest,
-        "direction": cached.direction,
-        "required_skills": parse_json_safely(cached.required_skills) or [],
-        "skill_assessments": parse_json_safely(cached.skill_assessments) or [],
-        "transferable_skills": parse_json_safely(cached.transferable_skills) or [],
-        "skill_gaps": parse_json_safely(cached.skill_gaps) or [],
-        "transition_difficulty": (cached.transition_difficulty),
-        "transition_reason": (cached.transition_reason),
-        "roadmap": parse_json_safely(cached.roadmap) or [],
-    }
-
 
 # ============================================================
 # GET ROADMAP
@@ -1102,10 +1050,67 @@ def trigger_career_pivot_analysis(
 
     verify_student_access(student_id, current_user)
 
-    return get_skill_gap(
-        student_id=student_id,
-        direction=body.direction,
-        force_refresh=body.force_refresh,
-        db=db,
-        current_user=current_user,
+    target_direction = (direction or "").strip()
+
+    if not target_direction:
+
+        (
+            latest_analysis,
+            analysis_dict,
+            existing_skills,
+            previous_interests,
+        ) = _get_student_context(student_id, db)
+
+        if not latest_analysis:
+            return {
+                "has_analysis": False,
+                "student_id": student_id,
+                "roadmap": [],
+                "detail": ("Roadmap unavailable. " "Complete Interest+ first."),
+            }
+
+        potential_directions = (
+            parse_json_safely(latest_analysis.potential_directions) or []
+        )
+
+        if potential_directions:
+            first = potential_directions[0]
+
+            target_direction = (
+                first if isinstance(first, str) else first.get("name", "")
+            )
+
+        else:
+            target_direction = latest_analysis.interest
+
+    cached = (
+        db.query(CareerPivotAnalysis)
+        .filter(
+            CareerPivotAnalysis.student_id == student_id,
+            CareerPivotAnalysis.direction == target_direction,
+        )
+        .first()
     )
+
+    status = _career_analysis_status(cached)
+
+    if status != "completed":
+
+        return {
+            "has_analysis": False,
+            "status": status,
+            "student_id": student_id,
+            "direction": target_direction,
+            "roadmap": [],
+        }
+
+    return {
+        "has_analysis": True,
+        "status": "completed",
+        "student_id": student_id,
+        "interest": cached.interest,
+        "direction": cached.direction,
+        "transition_difficulty": cached.transition_difficulty,
+        "transition_reason": cached.transition_reason,
+        "roadmap": parse_json_safely(cached.roadmap) or [],
+    }
