@@ -19,3 +19,4 @@ pytesseract
 Pillow
 pdf2image
 supabase
+python-multipart
