@@ -1300,6 +1300,71 @@ def get_roadmap(
         else:
             target_direction = latest_analysis.interest
 
+    eligibility_profile = analysis_dict.get("career_eligibility_profile") or {}
+    if not eligibility_profile:
+        return {
+            "has_analysis": False,
+            "status": "profile_required",
+            "student_id": student_id,
+            "direction": target_direction,
+            "detail": "Complete your career eligibility profile before generating an entry roadmap.",
+            "roadmap": [],
+        }
+
+    saved_paths = parse_json_safely(latest_analysis.potential_directions) or []
+    paths_are_eligibility_aware = bool(saved_paths) and all(
+        isinstance(item, dict)
+        and item.get("eligibility_status")
+        and item.get("pathway_summary")
+        for item in saved_paths
+    )
+
+    if not paths_are_eligibility_aware:
+        direction_result = discover_career_directions(
+            existing_skills=existing_skills,
+            previous_interests=previous_interests,
+            interest_analysis=analysis_dict,
+            student_profile=eligibility_profile,
+        )
+        saved_paths = [
+            item.model_dump() for item in direction_result.directions
+        ]
+        latest_analysis.potential_directions = json.dumps(saved_paths)
+        db.commit()
+
+    selected_path = next(
+        (
+            item for item in saved_paths
+            if isinstance(item, dict) and item.get("name") == target_direction
+        ),
+        None,
+    )
+
+    if not selected_path:
+        return {
+            "has_analysis": False,
+            "status": "path_not_found",
+            "student_id": student_id,
+            "direction": target_direction,
+            "detail": "This route is not in your current career recommendations. Return to Career Paths and select a recommended role.",
+            "roadmap": [],
+        }
+
+    if selected_path.get("eligibility_status") == "not_possible":
+        return {
+            "has_analysis": True,
+            "status": "blocked",
+            "blocked_path": True,
+            "eligibility_status": "not_possible",
+            "student_id": student_id,
+            "direction": target_direction,
+            "transition_reason": selected_path.get("eligibility_reason", ""),
+            "eligibility_reason": selected_path.get("eligibility_reason", ""),
+            "official_resources": selected_path.get("official_resources", []),
+            "pathway_summary": selected_path.get("pathway_summary", ""),
+            "roadmap": [],
+        }
+
     cached = (
         db.query(CareerPivotAnalysis)
         .filter(
