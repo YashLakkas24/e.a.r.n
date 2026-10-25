@@ -7,6 +7,11 @@ from ai_student.llm.service import (
     generate_transition_roadmap,
 )
 
+from ai_student.career_pivot.pathway_sources import (
+    eligibility_sort_key,
+    get_official_resources_for_direction,
+)
+
 from time import perf_counter
 
 from ai_student.career_pivot.schemas import (
@@ -25,11 +30,13 @@ def discover_career_directions(
     existing_skills: list[str] | None = None,
     previous_interests: list[str] | None = None,
     interest_analysis: dict | None = None,
+    student_profile: dict | None = None,
 ) -> DirectionDiscoveryResult:
 
     existing_skills = existing_skills or []
     previous_interests = previous_interests or []
     interest_analysis = interest_analysis or {}
+    student_profile = student_profile or {}
 
     interest = interest_analysis.get("interest", "")
 
@@ -46,7 +53,18 @@ def discover_career_directions(
         existing_skills=existing_skills,
         previous_interests=previous_interests,
         interest_analysis=interest_analysis,
+        student_profile=student_profile,
     )
+
+    # Add official entry portals deterministically; the model is not allowed
+    # to invent source URLs.
+    for direction in direction_result.directions:
+        direction.official_resources = get_official_resources_for_direction(
+            direction.name,
+            student_profile.get("state_or_ut"),
+        )
+
+    direction_result.directions.sort(key=lambda item: eligibility_sort_key(item.model_dump()))
 
     # ========================================================
     # Safety guard
@@ -175,10 +193,16 @@ def generate_roadmap_for_skill_analysis(
     skill_analysis: CareerSkillGapAnalysis,
     existing_skills: list[str] | None = None,
     previous_interests: list[str] | None = None,
+    student_profile: dict | None = None,
 ) -> TransitionRoadmapResult:
-    """Generate the roadmap separately, on demand."""
+    """Generate the career-entry roadmap separately, on demand."""
     existing_skills = existing_skills or []
     previous_interests = previous_interests or []
+    student_profile = student_profile or {}
+    official_resources = get_official_resources_for_direction(
+        skill_analysis.direction,
+        student_profile.get("state_or_ut"),
+    )
 
     stage_started = perf_counter()
     result = generate_transition_roadmap(
@@ -189,6 +213,8 @@ def generate_roadmap_for_skill_analysis(
         skill_assessments=skill_analysis.skill_assessments,
         transferable_skills=skill_analysis.transferable_skills,
         skill_gaps=skill_analysis.skill_gaps,
+        student_profile=student_profile,
+        official_resources=official_resources,
     )
     print(
         f"[CAREER PIVOT TIMING] Roadmap generation completed in "
