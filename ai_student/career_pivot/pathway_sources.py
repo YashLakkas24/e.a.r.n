@@ -59,6 +59,11 @@ def get_official_resources_for_direction(
 
     if any(term in name for term in ("upsc", "civil service", "ias", "ips", "ifs", "irs")):
         add(
+            "UPSC Civil Services Examination 2026 — Official Notification",
+            "https://www.upsc.gov.in/sites/default/files/Notif-CSP-2026-Engl-060226Rev.pdf",
+            "Official 2026 notice for the exam structure and eligibility rules. The 2026 application period is over; check the next cycle's notice before applying.",
+        )
+        add(
             "UPSC — Active Examinations",
             "https://www.upsc.gov.in/examinations/active-exams",
             "Official UPSC examination pages and notifications. Verify qualification, age, attempts, and dates in the relevant year's notice.",
@@ -110,6 +115,48 @@ def get_official_resources_for_direction(
         )
 
     return resources
+
+
+def enforce_verified_eligibility(direction, student_profile: dict | None = None) -> None:
+    """Prevent unsupported hard-ineligibility labels.
+
+    The initial curated rule set can verify the Indian-citizenship requirement
+    for IAS/IFS/IPS. Other model-generated "not_possible" judgments remain
+    unresolved until a path-specific, authoritative rule has been encoded.
+    """
+    profile = student_profile or {}
+    name = (getattr(direction, "name", "") or "").strip().lower()
+    citizenship = profile.get("citizenship_status", "unknown")
+
+    is_ias = "indian administrative service" in name or name == "ias"
+    is_ifs = "indian foreign service" in name or name == "ifs"
+    is_ips = "indian police service" in name or name == "ips"
+    has_verified_citizenship_barrier = (
+        citizenship == "other_citizenship" and (is_ias or is_ifs or is_ips)
+    )
+
+    if has_verified_citizenship_barrier:
+        direction.eligibility_status = "not_possible"
+        direction.eligibility_reason = (
+            "The UPSC Civil Services Examination 2026 notice requires Indian "
+            "citizenship for the Indian Administrative Service, Indian Foreign "
+            "Service, and Indian Police Service. Your profile says you are not "
+            "an Indian citizen. This is a route-specific preliminary finding; "
+            "verify the latest notice and consider other services/pathways."
+        )
+        direction.missing_information = []
+        return
+
+    if getattr(direction, "eligibility_status", "") == "not_possible":
+        direction.eligibility_status = "needs_more_information"
+        missing = list(getattr(direction, "missing_information", []) or [])
+        missing.append("verified role-specific eligibility rule")
+        direction.missing_information = list(dict.fromkeys(missing))
+        direction.eligibility_reason = (
+            "E.A.R.N. could not verify a hard eligibility barrier from its "
+            "current rule set. Check the latest official recruitment or "
+            "admissions notice before ruling this path out."
+        )
 
 
 def eligibility_sort_key(direction: dict) -> tuple[int, int]:
