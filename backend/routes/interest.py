@@ -1362,6 +1362,7 @@ def get_roadmap(
             "eligibility_reason": selected_path.get("eligibility_reason", ""),
             "official_resources": selected_path.get("official_resources", []),
             "pathway_summary": selected_path.get("pathway_summary", ""),
+            "career_path": selected_path,
             "roadmap": [],
         }
 
