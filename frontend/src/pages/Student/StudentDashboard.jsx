@@ -147,7 +147,7 @@ function StudentDashboard() {
     },
     {
       id: "roadmap",
-      label: "AI Roadmap",
+      label: "Career Planner",
       icon: Compass,
     },
   ];
@@ -194,7 +194,7 @@ function StudentDashboard() {
                   }
 
                   if (item.id === "roadmap") {
-                    navigate("/student/roadmap");
+                    navigate("/student/career-paths");
                     return;
                   }
 
