@@ -1017,6 +1017,20 @@ def get_skill_gap(
     )
     status = _career_analysis_status(cached)
 
+    # Never start a second core job while one is already running.
+    if status == "processing":
+        return JSONResponse(
+            status_code=202,
+            content={
+                "has_analysis": False,
+                "status": "processing",
+                "student_id": student_id,
+                "interest": latest_analysis.interest,
+                "direction": target_direction,
+                "message": "Skill-gap analysis is being generated.",
+            },
+        )
+
     if not force_refresh:
         if status in ("completed", "skill_gap_ready", "roadmap_processing", "roadmap_error"):
             return {
@@ -1150,6 +1164,42 @@ def get_roadmap(
         .first()
     )
     status = _career_analysis_status(cached)
+
+    # Poll an in-flight job rather than overwriting its state.
+    if status in ("processing", "roadmap_processing"):
+        return JSONResponse(
+            status_code=202,
+            content={
+                "has_analysis": False,
+                "status": "processing",
+                "student_id": student_id,
+                "direction": target_direction,
+                "message": "Career analysis is being generated.",
+            },
+        )
+
+    # Refreshing an existing roadmap only needs the roadmap stage. Reuse the
+    # saved skill-gap analysis to avoid rerunning the earlier LLM stages.
+    if force_refresh and status in ("completed", "skill_gap_ready", "roadmap_error"):
+        cached.transition_difficulty = None
+        cached.transition_reason = "__ROADMAP_PROCESSING__"
+        cached.roadmap = None
+        db.commit()
+        background_tasks.add_task(
+            _run_roadmap_background,
+            student_id,
+            target_direction,
+        )
+        return JSONResponse(
+            status_code=202,
+            content={
+                "has_analysis": False,
+                "status": "processing",
+                "student_id": student_id,
+                "direction": target_direction,
+                "message": "Roadmap refresh started.",
+            },
+        )
 
     if not force_refresh:
         if status == "completed":
