@@ -72,7 +72,12 @@ function StudentRoadmap() {
     while (Date.now() < deadline) {
       const res = await getStudentRoadmap(studentId, direction);
 
-      if (res.status === "completed" && res.has_analysis) {
+      if (
+        (res.status === "completed" && res.has_analysis) ||
+        (res.status === "blocked" && res.has_analysis) ||
+        res.status === "profile_required" ||
+        res.status === "path_not_found"
+      ) {
         return res;
       }
 
@@ -144,6 +149,11 @@ function StudentRoadmap() {
         }
 
         const res = await waitForRoadmap(targetDir);
+
+        if (res.status === "profile_required" || res.status === "path_not_found") {
+          navigate("/student/career-paths", { replace: true });
+          return;
+        }
 
         if (isMounted) {
           if (res.has_analysis === false) {
@@ -324,6 +334,7 @@ function StudentRoadmap() {
   const selectedCareerPath =
     directions.find((item) => item.name === (roadmapData?.direction || selectedDirection)) ||
     location.state?.careerPath ||
+    roadmapData?.career_path ||
     null;
   const isBlockedPath =
     roadmapData?.blocked_path ||
