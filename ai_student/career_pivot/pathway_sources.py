@@ -102,6 +102,13 @@ def get_official_resources_for_direction(
             "Official programme and admission information for one public-policy pathway. Check the current cycle's criteria.",
         )
 
+    if not resources:
+        add(
+            "National Career Service — Job Search and Career Support",
+            "https://www.ncs.gov.in/",
+            "Official employment and career-support portal. Search current job postings and job fairs; this link does not imply that a specific vacancy is open.",
+        )
+
     return resources
 
 
