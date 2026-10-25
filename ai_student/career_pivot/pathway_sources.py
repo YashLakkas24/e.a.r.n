@@ -7,6 +7,11 @@ feed. Never infer a deadline or eligibility condition from the portal URL alone.
 
 from __future__ import annotations
 
+import re
+
+
+CAREER_PATH_VERSION = "career_role_routes_v3"
+
 
 CAREER_STATUS_ORDER = {
     "possible_now": 0,
@@ -207,6 +212,61 @@ def enforce_verified_eligibility(direction, student_profile: dict | None = None)
             "current rule set. Check the latest official recruitment or "
             "admissions notice before ruling this path out."
         )
+
+
+
+_ACTIVITY_PREFIX = re.compile(
+    r"^(pursue|participate|build|improve|learn|practice|practise|take part in|"
+    r"engage in|create|start|begin|complete|volunteer|organize|organise|"
+    r"prepare for|study|explore|work on|join|run|conduct|develop|strengthen|"
+    r"practice|practise|level up)\\b",
+    re.IGNORECASE,
+)
+
+_ACTIVITY_PHRASES = (
+    "initiative organizing",
+    "initiative organising",
+    "learning projects",
+    "project plan",
+    "outreach practice",
+    "communication drills",
+    "follow-through system",
+    "accountability tracker",
+    "mini-plan",
+    "skill development",
+)
+
+_ROLE_TERMS = (
+    "officer", "analyst", "engineer", "developer", "scientist", "researcher",
+    "research associate", "policy associate", "programme officer", "program officer",
+    "coordinator", "administrator", "specialist", "manager", "executive",
+    "inspector", "auditor", "clerk", "assistant", "consultant", "designer",
+    "teacher", "lecturer", "professor", "nurse", "doctor", "lawyer", "advocate",
+    "accountant", "technician", "economist", "planner", "journalist", "editor",
+    "worker", "professional", "recruitment", "group b", "group c", "civil services",
+    "state services", "public service officer", "social worker", "developer",
+    "scientific officer", "technical officer", "commissioned officer",
+)
+
+
+def is_career_role_name(value: str) -> bool:
+    """Reject activity/learning-plan titles before they become career options.
+
+    This intentionally uses a conservative title check. It is not an occupation
+    database: it catches obvious activity-like generations and requires a
+    recognizable role/occupational-family term. Borderline suggestions are
+    regenerated once; if they still fail, they are omitted rather than shown as
+    a career.
+    """
+    name = re.sub(r"\\s+", " ", str(value or "")).strip().lower()
+    if not name or _ACTIVITY_PREFIX.search(name):
+        return False
+    if any(phrase in name for phrase in _ACTIVITY_PHRASES):
+        return False
+    # A parenthetical route can contain an action-like phrase without changing
+    # a genuine role title, so only inspect the title prefix before "(".
+    title = name.split("(", 1)[0].strip()
+    return any(term in title for term in _ROLE_TERMS)
 
 
 def eligibility_sort_key(direction: dict) -> tuple[int, int]:
