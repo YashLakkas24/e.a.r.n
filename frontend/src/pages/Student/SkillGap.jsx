@@ -12,7 +12,6 @@ import {
   RotateCcw,
   Layers,
   Award,
-  ChevronRight,
   Flame,
 } from "lucide-react";
 import {
@@ -403,18 +402,6 @@ if (res.has_analysis) {
               </div>
             )}
           </div>
-          <button
-            className="action-btn primary"
-            onClick={() =>
-              navigate("/student/roadmap", {
-                state: { direction: gapData?.direction },
-              })
-            }
-          >
-            <Sparkles size={16} />
-            View AI Roadmap
-            <ChevronRight size={16} />
-          </button>
         </section>
 
         {/* Summary Metrics */}
