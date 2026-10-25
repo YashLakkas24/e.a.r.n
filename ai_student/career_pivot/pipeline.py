@@ -9,6 +9,7 @@ from ai_student.llm.service import (
 
 from ai_student.career_pivot.pathway_sources import (
     eligibility_sort_key,
+    enforce_verified_eligibility,
     get_official_resources_for_direction,
 )
 
@@ -79,6 +80,8 @@ def discover_career_directions(
                 student_profile.get("state_or_ut"),
             )
         ]
+
+        enforce_verified_eligibility(direction, student_profile)
 
         if direction.eligibility_status == "not_possible":
             role_text = direction.name.lower()
