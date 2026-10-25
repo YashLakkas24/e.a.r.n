@@ -122,7 +122,11 @@ function StudentRoadmap() {
           selectedDirection ||
           (availableDirs.length > 0 ? availableDirs[0].name : null);
 
-        const selectedPath = availableDirs.find((item) => item.name === targetDir);
+        const selectedPath =
+          availableDirs.find((item) => item.name === targetDir) ||
+          (location.state?.careerPath?.name === targetDir
+            ? location.state.careerPath
+            : null);
 
         // Do not generate a seemingly actionable roadmap for a path explicitly
         // flagged as blocked by the eligibility triage.
