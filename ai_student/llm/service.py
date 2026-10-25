@@ -469,11 +469,13 @@ def generate_direction_discovery(
     existing_skills: list[str] | None = None,
     previous_interests: list[str] | None = None,
     interest_analysis: dict | None = None,
+    student_profile: dict | None = None,
 ) -> DirectionDiscoveryResult:
 
     existing_skills = existing_skills or []
     previous_interests = previous_interests or []
     interest_analysis = interest_analysis or {}
+    student_profile = student_profile or {}
 
     user_prompt = f"""
 Current interest:
@@ -488,13 +490,16 @@ Previous interests:
 Interest analysis:
 {json.dumps(interest_analysis, indent=2)}
 
-Identify approximately 3 to 5 realistic directions
-that this student could explore.
+Career eligibility profile:
+{json.dumps(student_profile, indent=2)}
 
-Base the directions only on the information provided.
-Do not invent skills, experience, achievements, or interests.
+Identify exactly 5 realistic career roles or specialization pathways. For each,
+provide the pathway type, a concise entry-route summary, and a conservative
+eligibility status based on the supplied profile. Missing profile facts must
+produce "needs_more_information", not "not_possible". Do not invent official
+exam dates, vacancies, or eligibility rules.
 
-Return ONLY valid JSON.
+Use only the JSON structure defined in the system instructions.
 """
 
     response = safe_chat_completion(
@@ -1266,6 +1271,8 @@ def generate_transition_roadmap(
     skill_assessments: list | None = None,
     transferable_skills: list | None = None,
     skill_gaps: list | None = None,
+    student_profile: dict | None = None,
+    official_resources: list[dict] | None = None,
 ) -> TransitionRoadmapResult:
 
     existing_skills = existing_skills or []
@@ -1274,6 +1281,8 @@ def generate_transition_roadmap(
     skill_assessments = skill_assessments or []
     transferable_skills = transferable_skills or []
     skill_gaps = skill_gaps or []
+    student_profile = student_profile or {}
+    official_resources = official_resources or []
 
     user_prompt = f"""
 TARGET DIRECTION
@@ -1287,6 +1296,14 @@ EXISTING STUDENT SKILLS
 PREVIOUS INTERESTS
 ------------------
 {json.dumps(previous_interests, indent=2)}
+
+CAREER ELIGIBILITY PROFILE
+--------------------------
+{json.dumps(student_profile, indent=2)}
+
+OFFICIAL RESOURCE ALLOWLIST (URLs only from this list may be returned)
+----------------------------------------------------------------------
+{json.dumps(official_resources, indent=2)}
 
 REQUIRED SKILLS FROM STAGE 2
 ----------------------------
@@ -1417,7 +1434,20 @@ Return ONLY valid JSON.
         ) from e
 
     try:
-        return TransitionRoadmapResult.model_validate(data)
+        result = TransitionRoadmapResult.model_validate(data)
+        # Never expose model-invented or unapproved URLs as official sources.
+        allowed = {
+            item.get("url"): item.get("label", "")
+            for item in official_resources
+            if item.get("url")
+        }
+        for step in result.roadmap:
+            if step.official_resource_url not in allowed:
+                step.official_resource_url = ""
+                step.official_resource_label = ""
+            elif step.official_resource_label != allowed[step.official_resource_url]:
+                step.official_resource_label = allowed[step.official_resource_url]
+        return result
 
     except Exception as e:
         raise ValueError(
