@@ -16,6 +16,7 @@ from time import perf_counter
 
 from ai_student.career_pivot.schemas import (
     DirectionDiscoveryResult,
+    CareerResource,
     CareerSkillGapAnalysis,
     CareerDirectionAnalysis,
     TransitionRoadmapResult,
@@ -59,10 +60,13 @@ def discover_career_directions(
     # Add official entry portals deterministically; the model is not allowed
     # to invent source URLs.
     for direction in direction_result.directions:
-        direction.official_resources = get_official_resources_for_direction(
-            direction.name,
-            student_profile.get("state_or_ut"),
-        )
+        direction.official_resources = [
+            CareerResource.model_validate(resource)
+            for resource in get_official_resources_for_direction(
+                direction.name,
+                student_profile.get("state_or_ut"),
+            )
+        ]
 
     direction_result.directions.sort(key=lambda item: eligibility_sort_key(item.model_dump()))
 
