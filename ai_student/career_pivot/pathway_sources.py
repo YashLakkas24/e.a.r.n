@@ -144,7 +144,7 @@ def enforce_verified_eligibility(direction, student_profile: dict | None = None)
     citizenship = profile.get("citizenship_status", "unknown")
 
     is_ias = "indian administrative service" in name or name == "ias"
-    is_ifs = "indian foreign service" in name or name == "ifs"
+    is_ifs = "indian foreign service" in name
     is_ips = "indian police service" in name or name == "ips"
     has_verified_citizenship_barrier = (
         citizenship == "other_citizenship" and (is_ias or is_ifs or is_ips)
