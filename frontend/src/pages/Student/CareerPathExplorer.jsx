@@ -6,7 +6,6 @@ import {
   ArrowRight,
   BrainCircuit,
   BriefcaseBusiness,
-  CalendarClock,
   ChartNoAxesCombined,
   CheckCircle2,
   CircleHelp,
