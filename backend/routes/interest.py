@@ -1343,6 +1343,19 @@ def get_roadmap(
             item.model_dump() for item in direction_result.directions
         ]
         latest_analysis.potential_directions = json.dumps(saved_paths)
+
+        # These paths may have been generated under an older activity-based
+        # prompt. Clear old roadmaps so a same-named role cannot reuse a stale
+        # generic learning plan after career-path semantics change.
+        prior_path_analyses = (
+            db.query(CareerPivotAnalysis)
+            .filter(CareerPivotAnalysis.student_id == student_id)
+            .all()
+        )
+        for prior_analysis in prior_path_analyses:
+            prior_analysis.transition_difficulty = None
+            prior_analysis.transition_reason = "__ROADMAP_PENDING__"
+            prior_analysis.roadmap = None
         db.commit()
 
     selected_path = next(
