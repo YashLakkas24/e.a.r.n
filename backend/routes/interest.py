@@ -1358,6 +1358,13 @@ def get_roadmap(
             prior_analysis.roadmap = None
         db.commit()
 
+        # If this was a generic /student/roadmap visit without an explicit
+        # selected direction, continue with the first newly ranked role.
+        # If an old explicit direction was passed, the path-not-found response
+        # below sends the student back to choose from the refreshed options.
+        if not (direction or "").strip() and saved_paths:
+            target_direction = saved_paths[0].get("name", target_direction)
+
     selected_path = next(
         (
             item for item in saved_paths
