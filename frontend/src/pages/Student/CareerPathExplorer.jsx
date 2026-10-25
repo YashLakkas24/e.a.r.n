@@ -663,6 +663,11 @@ function CareerPathExplorer() {
                         <StatusIcon size={14} />
                         {status.label}
                       </span>
+                      {direction.pathway_type && (
+                        <span className="pathway-type-tag">
+                          {String(direction.pathway_type).replaceAll("_", " ")}
+                        </span>
+                      )}
                     </div>
 
                     <h3>{direction.name}</h3>
