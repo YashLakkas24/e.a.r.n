@@ -398,3 +398,48 @@
     justify-content: center;
   }
 }
+
+/* Career path explorer promotion */
+.career-explorer-promo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.career-explorer-description {
+  margin: -4px 0 2px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.career-explorer-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: auto;
+}
+
+.career-explorer-footer-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+@media (max-width: 700px) {
+  .career-explorer-promo .career-explorer-button {
+    width: 100%;
+  }
+
+  .career-explorer-footer-actions {
+    width: 100%;
+  }
+
+  .career-explorer-footer-actions .profile-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
