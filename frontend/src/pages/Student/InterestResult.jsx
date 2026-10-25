@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   ArrowLeft,
+  Compass,
   Sparkles,
   Landmark,
   Cpu,
@@ -155,16 +156,6 @@ function InterestResult() {
   const interestName = analysis.interest || "Interest";
 
   const skillGaps = analysis.skill_gaps || [];
-
-  const directions = (analysis.potential_directions || []).map((direction) =>
-    typeof direction === "string"
-      ? {
-          name: direction,
-          fit_score: null,
-          reason: "",
-        }
-      : direction,
-  );
 
   return (
     <div className="interest-result-page">
@@ -329,37 +320,33 @@ function InterestResult() {
             </div>
           </div>
 
-          {/* Directions */}
-
-          <div className="result-panel">
+          {/* Career path explorer entry point */}
+          <div className="result-panel career-explorer-promo">
             <div className="panel-heading">
               <div className="panel-icon">
                 <Target size={20} />
               </div>
 
               <div>
-                <span>AREAS TO EXPLORE</span>
-                <h2>Potential directions</h2>
+                <span>YOUR NEXT STEP</span>
+                <h2>Explore career paths</h2>
               </div>
             </div>
 
-            <div className="direction-list">
-              {directions.length > 0 ? (
-                directions.map((direction) => (
-                  <div className="direction-item" key={direction.name}>
-                    <div className="direction-icon">
-                      <Target size={17} />
-                    </div>
+            <p className="career-explorer-description">
+              Discover different roles connected to your interests. Open a
+              path to explore its required skills and personalized learning
+              roadmap.
+            </p>
 
-                    <div className="direction-info">
-                      <strong>{direction.name}</strong>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p>No potential directions available.</p>
-              )}
-            </div>
+            <button
+              className="profile-button career-explorer-button"
+              onClick={() => navigate("/student/career-paths")}
+            >
+              <Sparkles size={17} />
+              Discover career paths
+              <ArrowRight size={17} />
+            </button>
           </div>
         </section>
 
@@ -372,39 +359,19 @@ function InterestResult() {
             <h2>Your interest profile can evolve.</h2>
 
             <p>
-              Explore your personalized skill gap analysis, compare your skills
-              against industry standards, and generate an AI-powered learning
-              roadmap.
+              Explore possible career paths, understand the skills they
+              require, and choose a personalized learning roadmap.
             </p>
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              gap: "12px",
-              flexWrap: "wrap",
-              alignItems: "center",
-            }}
-          >
+          <div className="career-explorer-footer-actions">
             <button
               className="profile-button"
-              onClick={() => navigate("/student/skills")}
+              onClick={() => navigate("/student/career-paths")}
             >
-              <Puzzle size={17} style={{ marginRight: "6px" }} />
-              Analyze Skill Gaps
-              <ArrowRight size={17} style={{ marginLeft: "6px" }} />
-            </button>
-
-            <button
-              className="profile-button"
-              style={{
-                background: "rgba(255, 255, 255, 0.08)",
-                border: "1px solid rgba(255, 255, 255, 0.15)",
-              }}
-              onClick={() => navigate("/student/roadmap")}
-            >
-              <Sparkles size={17} style={{ marginRight: "6px" }} />
-              View Roadmap
+              <Compass size={17} />
+              Explore Career Paths
+              <ArrowRight size={17} />
             </button>
 
             <button
@@ -417,7 +384,7 @@ function InterestResult() {
             >
               Dashboard
             </button>
-          </div>
+          </div>>
         </section>
       </main>
     </div>
