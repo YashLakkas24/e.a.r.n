@@ -470,12 +470,26 @@ def generate_direction_discovery(
     previous_interests: list[str] | None = None,
     interest_analysis: dict | None = None,
     student_profile: dict | None = None,
+    rejected_directions: list[str] | None = None,
 ) -> DirectionDiscoveryResult:
 
     existing_skills = existing_skills or []
     previous_interests = previous_interests or []
     interest_analysis = interest_analysis or {}
     student_profile = student_profile or {}
+    rejected_directions = rejected_directions or []
+
+    rejected_titles_note = ""
+    if rejected_directions:
+        rejected_titles_note = (
+            "\\nREJECTED TITLES — DO NOT REPEAT\\n"
+            + json.dumps(rejected_directions, ensure_ascii=False)
+            + "\\nThese titles were rejected because they were activities, generic "
+            "interests, or not recognizable occupational roles. Replace them "
+            "with concrete job titles / occupational families. Exam names, "
+            "degrees, projects and preparation activities are entry-route steps, "
+            "not career titles. Return five distinct role titles.\\n"
+        )
 
     user_prompt = f"""
 Current interest:
@@ -492,6 +506,7 @@ Interest analysis:
 
 Career eligibility profile:
 {json.dumps(student_profile, indent=2)}
+{rejected_titles_note}
 
 Identify exactly 5 realistic career roles or specialization pathways. For each,
 provide the pathway type, a concise entry-route summary, and a conservative
