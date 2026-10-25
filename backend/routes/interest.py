@@ -31,6 +31,7 @@ from ai_student.career_pivot.pipeline import (
     analyze_selected_skills,
     generate_roadmap_for_skill_analysis,
 )
+from ai_student.career_pivot.pathway_sources import CAREER_PATH_VERSION
 from ai_student.career_pivot.schemas import CareerSkillGapAnalysis
 from fastapi.responses import JSONResponse
 
@@ -1055,6 +1056,7 @@ def get_career_directions(
         isinstance(item, dict)
         and item.get("eligibility_status")
         and item.get("pathway_summary")
+        and item.get("pathway_version") == CAREER_PATH_VERSION
         for item in cached_directions
     )
 
@@ -1326,6 +1328,7 @@ def get_roadmap(
         isinstance(item, dict)
         and item.get("eligibility_status")
         and item.get("pathway_summary")
+        and item.get("pathway_version") == CAREER_PATH_VERSION
         for item in saved_paths
     )
 
