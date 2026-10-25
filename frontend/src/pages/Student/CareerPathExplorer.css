@@ -478,3 +478,421 @@
     padding: 7px 9px;
   }
 }
+
+
+/* Eligibility-aware career-path product */
+.eligibility-profile-panel {
+  padding: 24px;
+  border: 1px solid rgba(96, 165, 250, 0.22);
+  border-radius: 17px;
+  background: linear-gradient(145deg, rgba(30, 41, 59, 0.82), rgba(15, 23, 42, 0.86));
+}
+
+.eligibility-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.eligibility-panel-heading > div:last-child {
+  flex: 1;
+}
+
+.eligibility-panel-heading h2 {
+  margin: 6px 0 8px;
+  color: #f8fafc;
+  font-size: 1.25rem;
+}
+
+.eligibility-panel-heading p {
+  max-width: 760px;
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+.eligibility-profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.eligibility-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.eligibility-form-grid > label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: #dbe4f0;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.eligibility-form-grid input,
+.eligibility-form-grid select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 9px;
+  outline: none;
+  background: rgba(15, 23, 42, 0.85);
+  color: #f8fafc;
+  font: inherit;
+  font-size: 0.86rem;
+}
+
+.eligibility-form-grid input:focus,
+.eligibility-form-grid select:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.11);
+}
+
+.eligibility-form-grid input::placeholder {
+  color: #64748b;
+}
+
+.eligibility-form-grid small {
+  color: #7f91ab;
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.eligibility-preferences {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.065);
+  border-radius: 11px;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.eligibility-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: #cbd5e1;
+  font-size: 0.83rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.eligibility-checkbox input {
+  margin-top: 3px;
+  accent-color: #60a5fa;
+}
+
+.eligibility-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.eligibility-disclaimer {
+  margin: 0;
+  padding-top: 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  color: #8495ad;
+  font-size: 0.76rem;
+  line-height: 1.6;
+}
+
+.career-profile-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 15px 18px;
+  border: 1px solid rgba(96, 165, 250, 0.17);
+  border-radius: 13px;
+  background: rgba(30, 58, 138, 0.09);
+}
+
+.career-profile-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.career-profile-summary strong {
+  color: #e2e8f0;
+  font-size: 0.92rem;
+  text-transform: capitalize;
+}
+
+.career-profile-summary p {
+  margin: 0;
+  color: #8597b0;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.career-explorer-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 9px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.career-explorer-secondary:hover {
+  border-color: rgba(96, 165, 250, 0.33);
+  color: white;
+}
+
+.pathway-count-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 13px;
+  background: rgba(15, 23, 42, 0.58);
+}
+
+.pathway-count-strip button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 11px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.pathway-count-strip button:hover {
+  color: #e2e8f0;
+  background: rgba(148, 163, 184, 0.07);
+}
+
+.pathway-count-strip button.active {
+  border-color: rgba(96, 165, 250, 0.25);
+  background: rgba(59, 130, 246, 0.13);
+  color: #dbeafe;
+}
+
+.pathway-count-strip strong {
+  min-width: 19px;
+  padding: 2px 5px;
+  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.12);
+  color: inherit;
+  text-align: center;
+  font-size: 0.7rem;
+}
+
+.career-path-card {
+  position: relative;
+}
+
+.career-path-card-blocked {
+  border-color: rgba(248, 113, 113, 0.25);
+  background: linear-gradient(145deg, rgba(69, 10, 10, 0.19), rgba(15, 23, 42, 0.88));
+}
+
+.career-path-status-row {
+  margin: 0 0 12px;
+}
+
+.eligibility-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 0.73rem;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.eligibility-possible-now {
+  border-color: rgba(52, 211, 153, 0.24);
+  background: rgba(52, 211, 153, 0.1);
+  color: #6ee7b7;
+}
+
+.eligibility-after-graduation {
+  border-color: rgba(96, 165, 250, 0.25);
+  background: rgba(59, 130, 246, 0.11);
+  color: #93c5fd;
+}
+
+.eligibility-additional-qualification {
+  border-color: rgba(192, 132, 252, 0.25);
+  background: rgba(168, 85, 247, 0.1);
+  color: #d8b4fe;
+}
+
+.eligibility-needs-information {
+  border-color: rgba(148, 163, 184, 0.2);
+  background: rgba(148, 163, 184, 0.08);
+  color: #cbd5e1;
+}
+
+.eligibility-not-possible {
+  border-color: rgba(248, 113, 113, 0.32);
+  background: rgba(127, 29, 29, 0.25);
+  color: #fca5a5;
+}
+
+.eligibility-explanation {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 9px;
+  background: rgba(15, 23, 42, 0.47);
+}
+
+.eligibility-explanation p {
+  margin: 0;
+  color: #bdc9d9;
+  font-size: 0.79rem;
+  line-height: 1.5;
+}
+
+.eligibility-explanation.blocked {
+  border-color: rgba(248, 113, 113, 0.18);
+  background: rgba(127, 29, 29, 0.12);
+}
+
+.eligibility-explanation.blocked svg {
+  flex-shrink: 0;
+  color: #fca5a5;
+}
+
+.entry-route-summary {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.065);
+}
+
+.entry-route-summary > span {
+  display: block;
+  margin-bottom: 6px;
+  color: #93c5fd;
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.entry-route-summary p {
+  margin: 0;
+  color: #d1d9e6;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.missing-facts {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.missing-facts strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #b9c6d8;
+  font-size: 0.75rem;
+}
+
+.missing-facts ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #94a3b8;
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+
+.official-resource-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.official-resource-list a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  color: #93c5fd;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  text-decoration: none;
+}
+
+.official-resource-list a:hover {
+  color: #dbeafe;
+  text-decoration: underline;
+}
+
+.career-path-card-footer {
+  margin-top: auto;
+  padding-top: 15px;
+}
+
+.career-path-card-footer > span {
+  display: block;
+  margin-bottom: 12px;
+  color: #7f91aa;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .eligibility-profile-panel {
+    padding: 17px;
+  }
+
+  .eligibility-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .career-profile-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pathway-count-strip {
+    align-items: stretch;
+  }
+
+  .pathway-count-strip button {
+    flex: 1 1 calc(50% - 8px);
+    justify-content: space-between;
+  }
+
+  .eligibility-panel-heading {
+    gap: 10px;
+  }
+}
