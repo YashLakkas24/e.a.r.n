@@ -147,6 +147,31 @@ def enforce_verified_eligibility(direction, student_profile: dict | None = None)
         direction.missing_information = []
         return
 
+    # Conservative age rule for the IAS/IFS/IPS route: under the latest
+    # available CSE 2026 notice, the standard age range is 21–32 on 1 Aug 2026.
+    # If the student explicitly reports no applicable relaxation and is at
+    # least 34 now (so over the upper limit even on that earlier cutoff date),
+    # this route is not eligible under that notice. Later examination rules can
+    # change, so the reason must name the cycle and link the official notice.
+    age = profile.get("age")
+    no_relaxation = profile.get("age_or_marks_relaxation") == "no"
+    if (
+        (is_ias or is_ifs or is_ips)
+        and isinstance(age, int)
+        and age >= 34
+        and no_relaxation
+    ):
+        direction.eligibility_status = "not_possible"
+        direction.eligibility_reason = (
+            "Under the latest available UPSC Civil Services Examination 2026 "
+            "notice, the standard age limit was 21–32 as of 1 August 2026. "
+            "Your stated age and indication that no age relaxation applies "
+            "put you above that limit for this notice. This is not a permanent "
+            "career judgment; recheck the eligibility rules for any later cycle."
+        )
+        direction.missing_information = []
+        return
+
     if getattr(direction, "eligibility_status", "") == "not_possible":
         direction.eligibility_status = "needs_more_information"
         missing = list(getattr(direction, "missing_information", []) or [])
