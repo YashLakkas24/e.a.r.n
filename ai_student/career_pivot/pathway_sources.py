@@ -236,6 +236,12 @@ _ACTIVITY_PHRASES = (
     "skill development",
 )
 
+_NON_ROLE_TITLE_PHRASES = (
+    "examination", " exam", "degree", "master of", "bachelor of",
+    "postgraduate diploma", "course", "certification", "learning path",
+    "training program", "training programme", "project", "initiative",
+)
+
 _ROLE_TERMS = (
     "officer", "analyst", "engineer", "developer", "scientist", "researcher",
     "research associate", "policy associate", "programme officer", "program officer",
@@ -262,6 +268,8 @@ def is_career_role_name(value: str) -> bool:
     if not name or _ACTIVITY_PREFIX.search(name):
         return False
     if any(phrase in name for phrase in _ACTIVITY_PHRASES):
+        return False
+    if any(phrase in name for phrase in _NON_ROLE_TITLE_PHRASES):
         return False
     # A parenthetical route can contain an action-like phrase without changing
     # a genuine role title, so only inspect the title prefix before "(".
