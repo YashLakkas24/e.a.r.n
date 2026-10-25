@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   Sparkles,
   Puzzle,
+  Compass,
   Map,
   LogOut,
   GraduationCap,
