@@ -530,6 +530,51 @@ Use only the JSON structure defined in the system instructions.
         ) from e
 
     try:
+        # Normalize common LLM enum variations conservatively before schema
+        # validation. In particular, "not eligible now" must not become an
+        # absolute "not possible" decision.
+        status_aliases = {
+            "eligible_now": "possible_now",
+            "possible": "possible_now",
+            "eligible_after_graduation": "possible_after_graduation",
+            "after_graduation": "possible_after_graduation",
+            "requires_additional_qualification": "additional_qualification_required",
+            "further_qualification_required": "additional_qualification_required",
+            "needs_more_info": "needs_more_information",
+            "unknown": "needs_more_information",
+            "not_eligible": "needs_more_information",
+            "not_eligible_currently": "needs_more_information",
+            "blocked": "not_possible",
+        }
+        pathway_aliases = {
+            "government_exam": "competitive_exam",
+            "recruitment_exam": "competitive_exam",
+            "degree_admission": "higher_education",
+            "further_study": "higher_education",
+            "public_sector": "direct_recruitment",
+            "ngo": "private_or_social_sector",
+            "social_sector": "private_or_social_sector",
+        }
+
+        directions = data.get("directions", []) if isinstance(data, dict) else []
+        for direction in directions:
+            if not isinstance(direction, dict):
+                continue
+            status = str(direction.get("eligibility_status", "needs_more_information")).strip().lower().replace(" ", "_")
+            direction["eligibility_status"] = status_aliases.get(status, status)
+            pathway_type = str(direction.get("pathway_type", "other")).strip().lower().replace(" ", "_")
+            direction["pathway_type"] = pathway_aliases.get(pathway_type, pathway_type)
+
+            missing = direction.get("missing_information", [])
+            if isinstance(missing, str):
+                direction["missing_information"] = [missing] if missing.strip() else []
+            elif not isinstance(missing, list):
+                direction["missing_information"] = []
+
+            # Incomplete facts cannot justify an absolute negative decision.
+            if direction["eligibility_status"] == "not_possible" and direction["missing_information"]:
+                direction["eligibility_status"] = "needs_more_information"
+
         return DirectionDiscoveryResult.model_validate(data)
 
     except Exception as e:
