@@ -84,6 +84,11 @@ def get_official_resources_for_direction(
             "Official UPSC examination pages and notifications. Verify qualification, age, attempts, and dates in the relevant year's notice.",
         )
         add(
+            "UPSC Online Application Portal",
+            "https://upsconline.nic.in",
+            "Official application portal. Apply only when the relevant examination's application window is open.",
+        )
+        add(
             "UPSC — Examination Notifications",
             "https://www.upsc.gov.in/exams-related-info/exam-notification",
             "Official exam notices and notification documents.",
@@ -99,9 +104,14 @@ def get_official_resources_for_direction(
     if any(term in name for term in ("state public service", "state civil service", "mpsc", "state psc")):
         if "maharashtra" in state or "maharashtra" in name or "mpsc" in name:
             add(
-                "Maharashtra Public Service Commission — Online Application System",
-                "https://revenue.mahaonline.gov.in/MPSC/MPSCHome.aspx",
-                "Official Maharashtra PSC application portal. Verify the relevant advertisement and post-specific criteria.",
+                "Maharashtra Public Service Commission — Official Notices",
+                "https://mpsc.gov.in/announcement_and_circular/true",
+                "Official MPSC announcements and circulars. Check the specific recruitment advertisement for current dates and eligibility.",
+            )
+            add(
+                "MPSC Online Application Portal",
+                "https://mpsconline.gov.in/candidate",
+                "Official online candidate portal. Applications are accepted only during the window stated in the relevant notice.",
             )
         else:
             add(
