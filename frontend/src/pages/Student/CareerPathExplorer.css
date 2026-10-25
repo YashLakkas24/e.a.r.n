@@ -896,3 +896,17 @@
     gap: 10px;
   }
 }
+
+
+.pathway-type-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 7px;
+  background: rgba(148, 163, 184, 0.06);
+  color: #aab7ca;
+  font-size: 0.69rem;
+  font-weight: 650;
+  text-transform: capitalize;
+}
