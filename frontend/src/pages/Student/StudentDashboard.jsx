@@ -14,7 +14,6 @@ import {
   LayoutDashboard,
   Sparkles,
   Puzzle,
-  Compass,
   Map,
   LogOut,
   GraduationCap,
@@ -145,11 +144,6 @@ function StudentDashboard() {
       label: "Career Paths",
       icon: Map,
     },
-    {
-      id: "roadmap",
-      label: "Career Planner",
-      icon: Compass,
-    },
   ];
 
   return (
@@ -189,11 +183,6 @@ function StudentDashboard() {
                   }
 
                   if (item.id === "skills") {
-                    navigate("/student/career-paths");
-                    return;
-                  }
-
-                  if (item.id === "roadmap") {
                     navigate("/student/career-paths");
                     return;
                   }
