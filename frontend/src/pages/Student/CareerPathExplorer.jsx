@@ -722,7 +722,7 @@ function CareerPathExplorer() {
                     <div className="career-path-card-footer">
                       <span>{status.detail}</span>
                       <button className="career-path-open" type="button" onClick={() => openPath(direction)}>
-                        View entry roadmap
+                        {isNotPossible ? "Review eligibility barrier" : "View entry roadmap"}
                         <ArrowRight size={16} />
                       </button>
                     </div>
