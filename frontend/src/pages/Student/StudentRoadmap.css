@@ -471,3 +471,285 @@
   gap: 12px;
   flex-wrap: wrap;
 }
+
+
+/* Eligibility-aware career entry roadmap */
+.pathway-blocked-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid rgba(248, 113, 113, 0.32);
+  border-radius: 7px;
+  background: rgba(127, 29, 29, 0.24);
+  color: #fca5a5;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.roadmap-entry-summary {
+  padding: 15px 16px;
+  border: 1px solid rgba(96, 165, 250, 0.16);
+  border-radius: 12px;
+  background: rgba(30, 58, 138, 0.11);
+}
+
+.roadmap-entry-summary strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #93c5fd;
+  font-size: 0.82rem;
+}
+
+.roadmap-entry-summary p {
+  margin: 0;
+  color: #d1d9e6;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.roadmap-eligibility-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.13);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.roadmap-eligibility-reason.blocked {
+  border-color: rgba(248, 113, 113, 0.26);
+  background: rgba(127, 29, 29, 0.12);
+}
+
+.roadmap-eligibility-reason > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #fca5a5;
+}
+
+.roadmap-eligibility-reason strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #e2e8f0;
+  font-size: 0.83rem;
+}
+
+.roadmap-eligibility-reason p {
+  margin: 0;
+  color: #bdc9d9;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.roadmap-official-resources {
+  padding: 13px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.3);
+}
+
+.roadmap-official-resources > strong {
+  display: block;
+  margin-bottom: 9px;
+  color: #94a3b8;
+  font-size: 0.76rem;
+}
+
+.roadmap-official-resources > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px 16px;
+}
+
+.roadmap-official-resources a,
+.step-official-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #93c5fd;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  text-decoration: none;
+}
+
+.roadmap-official-resources a:hover,
+.step-official-link:hover {
+  color: #dbeafe;
+  text-decoration: underline;
+}
+
+.blocked-path-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px;
+  border: 1px solid rgba(248, 113, 113, 0.26);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(127, 29, 29, 0.14), rgba(30, 41, 59, 0.42));
+}
+
+.blocked-path-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.blocked-path-heading > svg {
+  flex-shrink: 0;
+  color: #fca5a5;
+}
+
+.blocked-path-heading h2 {
+  margin: 0 0 7px;
+  color: #fee2e2;
+  font-size: 1.15rem;
+}
+
+.blocked-path-heading p {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+.blocked-path-panel > h3 {
+  margin: 2px 0 0;
+  color: #f8fafc;
+  font-size: 0.95rem;
+}
+
+.roadmap-alternative-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.roadmap-alternative-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.54);
+  color: #cbd5e1;
+  text-align: left;
+  cursor: pointer;
+}
+
+.roadmap-alternative-list button:hover {
+  border-color: rgba(96, 165, 250, 0.32);
+  background: rgba(30, 58, 92, 0.28);
+}
+
+.roadmap-alternative-list button > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.roadmap-alternative-list strong {
+  color: #f8fafc;
+  font-size: 0.85rem;
+}
+
+.roadmap-alternative-list small {
+  color: #94a3b8;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.route-step-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.route-step-type {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 7px;
+  border: 1px solid rgba(168, 85, 247, 0.22);
+  border-radius: 6px;
+  background: rgba(168, 85, 247, 0.1);
+  color: #d8b4fe;
+  font-size: 0.67rem;
+  font-weight: 750;
+  text-transform: capitalize;
+}
+
+.route-type-eligibility_check {
+  border-color: rgba(251, 191, 36, 0.22);
+  background: rgba(251, 191, 36, 0.08);
+  color: #fcd34d;
+}
+
+.route-type-education,
+.route-type-entrance_exam,
+.route-type-competitive_exam,
+.route-type-application,
+.route-type-selection_stage {
+  border-color: rgba(96, 165, 250, 0.23);
+  background: rgba(59, 130, 246, 0.1);
+  color: #93c5fd;
+}
+
+.route-step-duration {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #94a3b8;
+  font-size: 0.73rem;
+}
+
+.step-completion-evidence {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(52, 211, 153, 0.12);
+  border-radius: 9px;
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.step-completion-evidence svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #6ee7b7;
+}
+
+.step-completion-evidence p {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.step-completion-evidence strong {
+  color: #a7f3d0;
+}
+
+.step-official-link {
+  align-self: flex-start;
+  margin-top: 1px;
+}
+
+@media (max-width: 700px) {
+  .blocked-path-panel {
+    padding: 17px;
+  }
+
+  .roadmap-official-resources > div {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .roadmap-alternative-list button {
+    align-items: flex-start;
+  }
+}

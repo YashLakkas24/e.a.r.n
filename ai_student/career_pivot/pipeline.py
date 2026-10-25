@@ -7,10 +7,18 @@ from ai_student.llm.service import (
     generate_transition_roadmap,
 )
 
+from ai_student.career_pivot.pathway_sources import (
+    eligibility_sort_key,
+    enforce_verified_eligibility,
+    get_official_resources_for_direction,
+    is_career_role_name,
+)
+
 from time import perf_counter
 
 from ai_student.career_pivot.schemas import (
     DirectionDiscoveryResult,
+    CareerResource,
     CareerSkillGapAnalysis,
     CareerDirectionAnalysis,
     TransitionRoadmapResult,
@@ -25,11 +33,13 @@ def discover_career_directions(
     existing_skills: list[str] | None = None,
     previous_interests: list[str] | None = None,
     interest_analysis: dict | None = None,
+    student_profile: dict | None = None,
 ) -> DirectionDiscoveryResult:
 
     existing_skills = existing_skills or []
     previous_interests = previous_interests or []
     interest_analysis = interest_analysis or {}
+    student_profile = student_profile or {}
 
     interest = interest_analysis.get("interest", "")
 
@@ -46,7 +56,83 @@ def discover_career_directions(
         existing_skills=existing_skills,
         previous_interests=previous_interests,
         interest_analysis=interest_analysis,
+        student_profile=student_profile,
     )
+
+    # Prompts alone are not a reliable guard against activity-like output. Reject
+    # titles that are not recognizable occupational roles and retry once for
+    # replacements. Keep any valid first-pass roles; never relabel an activity
+    # as a career just to reach a fixed count.
+    first_pass = list(direction_result.directions)
+    rejected_titles = [
+        item.name for item in first_pass
+        if not is_career_role_name(item.name)
+    ]
+    if rejected_titles:
+        print(
+            "[CAREER PATH VALIDATION] Rejected non-role titles: "
+            + ", ".join(rejected_titles),
+            flush=True,
+        )
+        retry_result = generate_direction_discovery(
+            interest=interest,
+            existing_skills=existing_skills,
+            previous_interests=previous_interests,
+            interest_analysis=interest_analysis,
+            student_profile=student_profile,
+            rejected_directions=rejected_titles,
+        )
+
+        candidates = [
+            item for item in first_pass
+            if is_career_role_name(item.name)
+        ] + [
+            item for item in retry_result.directions
+            if is_career_role_name(item.name)
+        ]
+        deduplicated = []
+        seen_names = set()
+        for item in candidates:
+            normalized_name = " ".join(item.name.lower().split())
+            if normalized_name not in seen_names:
+                seen_names.add(normalized_name)
+                deduplicated.append(item)
+        direction_result.directions = deduplicated
+
+    # Final safety net: invalid titles must never reach the student UI.
+    direction_result.directions = [
+        item for item in direction_result.directions
+        if is_career_role_name(item.name)
+    ]
+
+    # Add official entry portals deterministically; the model is not allowed
+    # to invent source URLs. Apply a final conservative guard before showing
+    # "NOT POSSIBLE": a hard negative decision needs the profile facts that
+    # materially affect the chosen route.
+    for direction in direction_result.directions:
+        if not direction.pathway_summary:
+            direction.pathway_summary = (
+                "Confirm the formal qualifications and entry procedure in the "
+                "relevant official recruitment or admissions notice."
+            )
+        if not direction.eligibility_reason:
+            direction.eligibility_reason = (
+                "This is a preliminary fit assessment. Verify role-specific "
+                "eligibility in the official source before deciding."
+            )
+        direction.official_resources = [
+            CareerResource.model_validate(resource)
+            for resource in get_official_resources_for_direction(
+                direction.name,
+                student_profile.get("state_or_ut"),
+            )
+        ]
+
+        enforce_verified_eligibility(direction, student_profile)
+
+
+
+    direction_result.directions.sort(key=lambda item: eligibility_sort_key(item.model_dump()))
 
     # ========================================================
     # Safety guard
@@ -175,10 +261,18 @@ def generate_roadmap_for_skill_analysis(
     skill_analysis: CareerSkillGapAnalysis,
     existing_skills: list[str] | None = None,
     previous_interests: list[str] | None = None,
+    student_profile: dict | None = None,
+    career_path: dict | None = None,
 ) -> TransitionRoadmapResult:
-    """Generate the roadmap separately, on demand."""
+    """Generate the career-entry roadmap separately, on demand."""
     existing_skills = existing_skills or []
     previous_interests = previous_interests or []
+    student_profile = student_profile or {}
+    career_path = career_path or {}
+    official_resources = get_official_resources_for_direction(
+        skill_analysis.direction,
+        student_profile.get("state_or_ut"),
+    )
 
     stage_started = perf_counter()
     result = generate_transition_roadmap(
@@ -189,6 +283,9 @@ def generate_roadmap_for_skill_analysis(
         skill_assessments=skill_analysis.skill_assessments,
         transferable_skills=skill_analysis.transferable_skills,
         skill_gaps=skill_analysis.skill_gaps,
+        student_profile=student_profile,
+        official_resources=official_resources,
+        career_path=career_path,
     )
     print(
         f"[CAREER PIVOT TIMING] Roadmap generation completed in "

@@ -351,6 +351,60 @@ export async function getStudentCareerDirections(
 }
 
 /**
+ * Retrieve the student's eligibility profile used to assess career entry routes.
+ */
+export async function getStudentCareerEligibilityProfile(studentId) {
+  const cleanId = (studentId || "").trim().toUpperCase();
+  if (!cleanId) throw new Error("Student ID is required.");
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/students/${encodeURIComponent(cleanId)}/career-eligibility-profile`,
+    {
+      method: "GET",
+      headers: await getAuthHeaders(),
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to fetch career eligibility profile: ${errorText}`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Save the eligibility facts a student chooses to provide.
+ */
+export async function saveStudentCareerEligibilityProfile(studentId, profile) {
+  const cleanId = (studentId || "").trim().toUpperCase();
+  if (!cleanId) throw new Error("Student ID is required.");
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/students/${encodeURIComponent(cleanId)}/career-eligibility-profile`,
+    {
+      method: "PUT",
+      headers: await getAuthHeaders(true),
+      body: JSON.stringify(profile),
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    let message = errorText;
+    try {
+      const payload = JSON.parse(errorText);
+      message = payload.detail || payload.message || errorText;
+    } catch {
+      // Keep the response body as the message.
+    }
+    throw new Error(`Failed to save career eligibility profile: ${message}`);
+  }
+
+  return await response.json();
+}
+
+/**
  * Fetch Skill Gap Analysis for the student:
  * GET /api/students/{student_id}/skill-gap
  */

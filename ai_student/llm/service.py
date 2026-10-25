@@ -469,11 +469,27 @@ def generate_direction_discovery(
     existing_skills: list[str] | None = None,
     previous_interests: list[str] | None = None,
     interest_analysis: dict | None = None,
+    student_profile: dict | None = None,
+    rejected_directions: list[str] | None = None,
 ) -> DirectionDiscoveryResult:
 
     existing_skills = existing_skills or []
     previous_interests = previous_interests or []
     interest_analysis = interest_analysis or {}
+    student_profile = student_profile or {}
+    rejected_directions = rejected_directions or []
+
+    rejected_titles_note = ""
+    if rejected_directions:
+        rejected_titles_note = (
+            "\nREJECTED TITLES — DO NOT REPEAT\n"
+            + json.dumps(rejected_directions, ensure_ascii=False)
+            + "\nThese titles were rejected because they were activities, generic "
+            "interests, or not recognizable occupational roles. Replace them "
+            "with concrete job titles / occupational families. Exam names, "
+            "degrees, projects and preparation activities are entry-route steps, "
+            "not career titles. Return five distinct role titles.\n"
+        )
 
     user_prompt = f"""
 Current interest:
@@ -488,13 +504,17 @@ Previous interests:
 Interest analysis:
 {json.dumps(interest_analysis, indent=2)}
 
-Identify approximately 3 to 5 realistic directions
-that this student could explore.
+Career eligibility profile:
+{json.dumps(student_profile, indent=2)}
+{rejected_titles_note}
 
-Base the directions only on the information provided.
-Do not invent skills, experience, achievements, or interests.
+Identify exactly 5 realistic career roles or specialization pathways. For each,
+provide the pathway type, a concise entry-route summary, and a conservative
+eligibility status based on the supplied profile. Missing profile facts must
+produce "needs_more_information", not "not_possible". Do not invent official
+exam dates, vacancies, or eligibility rules.
 
-Return ONLY valid JSON.
+Use only the JSON structure defined in the system instructions.
 """
 
     response = safe_chat_completion(
@@ -525,6 +545,51 @@ Return ONLY valid JSON.
         ) from e
 
     try:
+        # Normalize common LLM enum variations conservatively before schema
+        # validation. In particular, "not eligible now" must not become an
+        # absolute "not possible" decision.
+        status_aliases = {
+            "eligible_now": "possible_now",
+            "possible": "possible_now",
+            "eligible_after_graduation": "possible_after_graduation",
+            "after_graduation": "possible_after_graduation",
+            "requires_additional_qualification": "additional_qualification_required",
+            "further_qualification_required": "additional_qualification_required",
+            "needs_more_info": "needs_more_information",
+            "unknown": "needs_more_information",
+            "not_eligible": "needs_more_information",
+            "not_eligible_currently": "needs_more_information",
+            "blocked": "not_possible",
+        }
+        pathway_aliases = {
+            "government_exam": "competitive_exam",
+            "recruitment_exam": "competitive_exam",
+            "degree_admission": "higher_education",
+            "further_study": "higher_education",
+            "public_sector": "direct_recruitment",
+            "ngo": "private_or_social_sector",
+            "social_sector": "private_or_social_sector",
+        }
+
+        directions = data.get("directions", []) if isinstance(data, dict) else []
+        for direction in directions:
+            if not isinstance(direction, dict):
+                continue
+            status = str(direction.get("eligibility_status", "needs_more_information")).strip().lower().replace(" ", "_")
+            direction["eligibility_status"] = status_aliases.get(status, status)
+            pathway_type = str(direction.get("pathway_type", "other")).strip().lower().replace(" ", "_")
+            direction["pathway_type"] = pathway_aliases.get(pathway_type, pathway_type)
+
+            missing = direction.get("missing_information", [])
+            if isinstance(missing, str):
+                direction["missing_information"] = [missing] if missing.strip() else []
+            elif not isinstance(missing, list):
+                direction["missing_information"] = []
+
+            # Incomplete facts cannot justify an absolute negative decision.
+            if direction["eligibility_status"] == "not_possible" and direction["missing_information"]:
+                direction["eligibility_status"] = "needs_more_information"
+
         return DirectionDiscoveryResult.model_validate(data)
 
     except Exception as e:
@@ -1266,6 +1331,9 @@ def generate_transition_roadmap(
     skill_assessments: list | None = None,
     transferable_skills: list | None = None,
     skill_gaps: list | None = None,
+    student_profile: dict | None = None,
+    official_resources: list[dict] | None = None,
+    career_path: dict | None = None,
 ) -> TransitionRoadmapResult:
 
     existing_skills = existing_skills or []
@@ -1274,6 +1342,9 @@ def generate_transition_roadmap(
     skill_assessments = skill_assessments or []
     transferable_skills = transferable_skills or []
     skill_gaps = skill_gaps or []
+    student_profile = student_profile or {}
+    official_resources = official_resources or []
+    career_path = career_path or {}
 
     user_prompt = f"""
 TARGET DIRECTION
@@ -1287,6 +1358,24 @@ EXISTING STUDENT SKILLS
 PREVIOUS INTERESTS
 ------------------
 {json.dumps(previous_interests, indent=2)}
+
+CAREER ELIGIBILITY PROFILE
+--------------------------
+{json.dumps(student_profile, indent=2)}
+
+SELECTED CAREER PATH ASSESSMENT
+-------------------------------
+{json.dumps(career_path, indent=2)}
+
+Use this selected-path assessment as the primary career context. Preserve its
+eligibility status and the specific entry-route summary. Do not replace a
+verified "not_possible" decision with a generic skill-development roadmap.
+If eligibility is "needs_more_information", place verification of those exact
+facts before exam/application steps.
+
+OFFICIAL RESOURCE ALLOWLIST (URLs only from this list may be returned)
+----------------------------------------------------------------------
+{json.dumps(official_resources, indent=2)}
 
 REQUIRED SKILLS FROM STAGE 2
 ----------------------------
@@ -1417,7 +1506,20 @@ Return ONLY valid JSON.
         ) from e
 
     try:
-        return TransitionRoadmapResult.model_validate(data)
+        result = TransitionRoadmapResult.model_validate(data)
+        # Never expose model-invented or unapproved URLs as official sources.
+        allowed = {
+            item.get("url"): item.get("label", "")
+            for item in official_resources
+            if item.get("url")
+        }
+        for step in result.roadmap:
+            if step.official_resource_url not in allowed:
+                step.official_resource_url = ""
+                step.official_resource_label = ""
+            elif step.official_resource_label != allowed[step.official_resource_url]:
+                step.official_resource_label = allowed[step.official_resource_url]
+        return result
 
     except Exception as e:
         raise ValueError(
