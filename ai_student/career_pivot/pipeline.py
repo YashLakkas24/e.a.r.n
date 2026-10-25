@@ -62,6 +62,16 @@ def discover_career_directions(
     # "NOT POSSIBLE": a hard negative decision needs the profile facts that
     # materially affect the chosen route.
     for direction in direction_result.directions:
+        if not direction.pathway_summary:
+            direction.pathway_summary = (
+                "Confirm the formal qualifications and entry procedure in the "
+                "relevant official recruitment or admissions notice."
+            )
+        if not direction.eligibility_reason:
+            direction.eligibility_reason = (
+                "This is a preliminary fit assessment. Verify role-specific "
+                "eligibility in the official source before deciding."
+            )
         direction.official_resources = [
             CareerResource.model_validate(resource)
             for resource in get_official_resources_for_direction(
