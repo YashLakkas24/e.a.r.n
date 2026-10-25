@@ -18,6 +18,7 @@ import {
 import {
   getStudentRoadmap,
   getStudentCareerDirections,
+  getStudentCareerEligibilityProfile,
 } from "../../services/studentService";
 import "./StudentRoadmap.css";
 
@@ -111,6 +112,12 @@ function StudentRoadmap() {
       try {
         setLoading(true);
         setError("");
+
+        const eligibilityProfile = await getStudentCareerEligibilityProfile(studentId);
+        if (!eligibilityProfile.has_profile) {
+          navigate("/student/career-paths", { replace: true });
+          return;
+        }
 
         let availableDirs = [];
         try {
