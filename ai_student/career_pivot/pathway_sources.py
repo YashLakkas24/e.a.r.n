@@ -57,7 +57,22 @@ def get_official_resources_for_direction(
             "Government recruitment portals listed by India's National Career Service. Check the recruiting department's own notice.",
         )
 
-    if any(term in name for term in ("upsc", "civil service", "ias", "ips", "ifs", "irs")):
+    if any(
+        term in name
+        for term in (
+            "upsc",
+            "civil service",
+            "indian administrative service",
+            "indian foreign service",
+            "indian police service",
+            "indian forest service",
+            "ias",
+            "ips",
+            "ifs",
+            "ifos",
+            "irs",
+        )
+    ):
         add(
             "UPSC Civil Services Examination 2026 — Official Notification",
             "https://www.upsc.gov.in/sites/default/files/Notif-CSP-2026-Engl-060226Rev.pdf",
