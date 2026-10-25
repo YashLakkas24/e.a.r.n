@@ -11,6 +11,7 @@ from ai_student.career_pivot.pathway_sources import (
     eligibility_sort_key,
     enforce_verified_eligibility,
     get_official_resources_for_direction,
+    is_career_role_name,
 )
 
 from time import perf_counter
@@ -57,6 +58,52 @@ def discover_career_directions(
         interest_analysis=interest_analysis,
         student_profile=student_profile,
     )
+
+    # Prompts alone are not a reliable guard against activity-like output. Reject
+    # titles that are not recognizable occupational roles and retry once for
+    # replacements. Keep any valid first-pass roles; never relabel an activity
+    # as a career just to reach a fixed count.
+    first_pass = list(direction_result.directions)
+    rejected_titles = [
+        item.name for item in first_pass
+        if not is_career_role_name(item.name)
+    ]
+    if rejected_titles:
+        print(
+            "[CAREER PATH VALIDATION] Rejected non-role titles: "
+            + ", ".join(rejected_titles),
+            flush=True,
+        )
+        retry_result = generate_direction_discovery(
+            interest=interest,
+            existing_skills=existing_skills,
+            previous_interests=previous_interests,
+            interest_analysis=interest_analysis,
+            student_profile=student_profile,
+            rejected_directions=rejected_titles,
+        )
+
+        candidates = [
+            item for item in first_pass
+            if is_career_role_name(item.name)
+        ] + [
+            item for item in retry_result.directions
+            if is_career_role_name(item.name)
+        ]
+        deduplicated = []
+        seen_names = set()
+        for item in candidates:
+            normalized_name = " ".join(item.name.lower().split())
+            if normalized_name not in seen_names:
+                seen_names.add(normalized_name)
+                deduplicated.append(item)
+        direction_result.directions = deduplicated
+
+    # Final safety net: invalid titles must never reach the student UI.
+    direction_result.directions = [
+        item for item in direction_result.directions
+        if is_career_role_name(item.name)
+    ]
 
     # Add official entry portals deterministically; the model is not allowed
     # to invent source URLs. Apply a final conservative guard before showing
