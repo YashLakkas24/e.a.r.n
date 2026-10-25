@@ -58,7 +58,9 @@ def discover_career_directions(
     )
 
     # Add official entry portals deterministically; the model is not allowed
-    # to invent source URLs.
+    # to invent source URLs. Apply a final conservative guard before showing
+    # "NOT POSSIBLE": a hard negative decision needs the profile facts that
+    # materially affect the chosen route.
     for direction in direction_result.directions:
         direction.official_resources = [
             CareerResource.model_validate(resource)
@@ -67,6 +69,41 @@ def discover_career_directions(
                 student_profile.get("state_or_ut"),
             )
         ]
+
+        if direction.eligibility_status == "not_possible":
+            role_text = direction.name.lower()
+            route_is_government_or_exam = direction.pathway_type in (
+                "competitive_exam", "direct_recruitment", "mixed"
+            ) or any(
+                term in role_text
+                for term in ("civil service", "government", "public service", "upsc", "ssc", "psc")
+            )
+            missing_facts = list(direction.missing_information or [])
+
+            if student_profile.get("highest_qualification") in (None, "", "unknown"):
+                missing_facts.append("highest completed qualification")
+            if student_profile.get("education_status") in (None, "", "unknown"):
+                missing_facts.append("whether you are currently studying or have completed your qualification")
+            if route_is_government_or_exam:
+                if student_profile.get("age") in (None, ""):
+                    missing_facts.append("age (where age limits apply)")
+                if student_profile.get("citizenship_status") in (None, "", "unknown"):
+                    missing_facts.append("citizenship status (where applicable)")
+
+            reason_text = (direction.eligibility_reason or "").lower()
+            if (
+                ("age" in reason_text or "marks" in reason_text or "relaxation" in reason_text)
+                and student_profile.get("age_or_marks_relaxation", "unknown") == "unknown"
+            ):
+                missing_facts.append("whether an age/marks relaxation could apply")
+
+            if missing_facts:
+                direction.eligibility_status = "needs_more_information"
+                direction.missing_information = list(dict.fromkeys(missing_facts))
+                direction.eligibility_reason = (
+                    "E.A.R.N. cannot safely mark this route as NOT POSSIBLE "
+                    "until these eligibility facts are confirmed."
+                )
 
     direction_result.directions.sort(key=lambda item: eligibility_sort_key(item.model_dump()))
 
