@@ -239,7 +239,7 @@ _ACTIVITY_PHRASES = (
 _NON_ROLE_TITLE_PHRASES = (
     "examination", " exam", "degree", "master of", "bachelor of",
     "postgraduate diploma", "course", "certification", "learning path",
-    "training program", "training programme", "project", "initiative",
+    "training program", "training programme",
 )
 
 _ROLE_TERMS = (
