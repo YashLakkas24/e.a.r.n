@@ -1,6 +1,35 @@
-.venv/
-.vscode/
-__pycache__/
-*.pyc
+# Environment variables
 .env
+.env*.local
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# Node
+node_modules/
+
+# Build output
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Firebase / secrets
 firebase-service-account.json

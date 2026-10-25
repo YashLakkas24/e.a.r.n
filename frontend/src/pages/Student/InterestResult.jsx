@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   ArrowLeft,
+  Compass,
   Sparkles,
   Landmark,
   Cpu,
@@ -28,12 +29,12 @@ const INTEREST_ICON_MAP = {
   "IT & Technology": Cpu,
   "Coding & Software": Code2,
   "Business & Entrepreneurship": Briefcase,
-  "Finance": TrendingUp,
+  Finance: TrendingUp,
   "Creative & Media": Palette,
-  "Healthcare": HeartPulse,
-  "Education": GraduationCap,
-  "Law": Scale,
-  "Marketing": Megaphone,
+  Healthcare: HeartPulse,
+  Education: GraduationCap,
+  Law: Scale,
+  Marketing: Megaphone,
 };
 
 function InterestIcon({ interest, size = 25 }) {
@@ -77,9 +78,7 @@ function InterestResult() {
         const studentId = getStudentId();
 
         if (!studentId) {
-          throw new Error(
-            "Student ID not found. Please login again."
-          );
+          throw new Error("Student ID not found. Please login again.");
         }
 
         const data = await getStudentInterestAnalysis(studentId);
@@ -88,15 +87,12 @@ function InterestResult() {
           setAnalysisData(data.analyses[0]);
         } else if (!initialAnalysis) {
           throw new Error(
-            "Interest analysis is not available yet. Please complete the Interest+ discovery quiz."
+            "Interest analysis is not available yet. Please complete the Interest+ discovery quiz.",
           );
         }
       } catch (err) {
         if (!initialAnalysis) {
-          setError(
-            err.message ||
-              "Failed to load interest analysis."
-          );
+          setError(err.message || "Failed to load interest analysis.");
         }
       } finally {
         setLoading(false);
@@ -120,10 +116,7 @@ function InterestResult() {
 
             <h2>Loading your Interest+ analysis...</h2>
 
-            <p>
-              We're retrieving your personalized
-              analysis.
-            </p>
+            <p>We're retrieving your personalized analysis.</p>
           </section>
         </main>
       </div>
@@ -144,9 +137,7 @@ function InterestResult() {
 
             <button
               className="profile-button"
-              onClick={() =>
-                navigate("/student/dashboard")
-              }
+              onClick={() => navigate("/student/dashboard")}
             >
               Back to Dashboard
             </button>
@@ -162,23 +153,16 @@ function InterestResult() {
     return null;
   }
 
-  const interestName =
-    analysis.interest || "Interest";
+  const interestName = analysis.interest || "Interest";
 
-  const skillGaps =
-    analysis.skill_gaps || [];
-
-  const directions =
-    analysis.potential_directions || [];
+  const skillGaps = analysis.skill_gaps || [];
 
   return (
     <div className="interest-result-page">
       <header className="result-header">
         <button
           className="result-back"
-          onClick={() =>
-            navigate("/student/dashboard")
-          }
+          onClick={() => navigate("/student/dashboard")}
         >
           <ArrowLeft size={17} />
           Dashboard
@@ -199,9 +183,7 @@ function InterestResult() {
         {/* Heading */}
 
         <section className="result-intro">
-          <span className="result-eyebrow">
-            YOUR INTEREST PROFILE
-          </span>
+          <span className="result-eyebrow">YOUR INTEREST PROFILE</span>
 
           <h1>
             Here's what we learned
@@ -210,9 +192,8 @@ function InterestResult() {
           </h1>
 
           <p>
-            This isn't a final career decision. It's a
-            snapshot of your current interests,
-            experience and areas worth exploring.
+            This isn't a final career decision. It's a snapshot of your current
+            interests, experience and areas worth exploring.
           </p>
         </section>
 
@@ -237,9 +218,7 @@ function InterestResult() {
               <div className="score-title">
                 <span>Interest</span>
 
-                <strong>
-                  {analysis.interest_score}%
-                </strong>
+                <strong>{analysis.interest_score}%</strong>
               </div>
 
               <div className="score-bar">
@@ -258,9 +237,7 @@ function InterestResult() {
               <div className="score-title">
                 <span>Current Capability</span>
 
-                <strong>
-                  {analysis.capability_score}%
-                </strong>
+                <strong>{analysis.capability_score}%</strong>
               </div>
 
               <div className="score-bar">
@@ -279,9 +256,7 @@ function InterestResult() {
               <div className="score-title">
                 <span>Experience</span>
 
-                <strong>
-                  {analysis.experience_score}%
-                </strong>
+                <strong>{analysis.experience_score}%</strong>
               </div>
 
               <div className="score-bar">
@@ -304,14 +279,9 @@ function InterestResult() {
           </div>
 
           <div>
-            <span className="result-section-label">
-              OUR ANALYSIS
-            </span>
+            <span className="result-section-label">OUR ANALYSIS</span>
 
-            <p>
-              {analysis.analysis ||
-                analysis.summary}
-            </p>
+            <p>{analysis.analysis || analysis.summary}</p>
           </div>
         </section>
 
@@ -345,51 +315,38 @@ function InterestResult() {
                   </div>
                 ))
               ) : (
-                <p>
-                  No specific skill gaps identified.
-                </p>
+                <p>No specific skill gaps identified.</p>
               )}
             </div>
           </div>
 
-          {/* Directions */}
-
-          <div className="result-panel">
+          {/* Career path explorer entry point */}
+          <div className="result-panel career-explorer-promo">
             <div className="panel-heading">
               <div className="panel-icon">
                 <Target size={20} />
               </div>
 
               <div>
-                <span>AREAS TO EXPLORE</span>
-                <h2>Potential directions</h2>
+                <span>YOUR NEXT STEP</span>
+                <h2>Explore career paths</h2>
               </div>
             </div>
 
-            <div className="direction-list">
-              {directions.length > 0 ? (
-                directions.map((direction) => (
-                  <div
-                    className="direction-item"
-                    key={direction}
-                  >
-                    <div className="direction-icon">
-                      <Target size={17} />
-                    </div>
+            <p className="career-explorer-description">
+              Discover different roles connected to your interests. Open a
+              path to explore its required skills and personalized learning
+              roadmap.
+            </p>
 
-                    <div className="direction-info">
-                      <strong>
-                        {direction}
-                      </strong>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p>
-                  No potential directions available.
-                </p>
-              )}
-            </div>
+            <button
+              className="profile-button career-explorer-button"
+              onClick={() => navigate("/student/career-paths")}
+            >
+              <Sparkles size={17} />
+              Discover career paths
+              <ArrowRight size={17} />
+            </button>
           </div>
         </section>
 
@@ -397,48 +354,33 @@ function InterestResult() {
 
         <section className="result-footer-card">
           <div>
-            <span className="result-section-label">
-              WHAT'S NEXT?
-            </span>
+            <span className="result-section-label">WHAT'S NEXT?</span>
 
-            <h2>
-              Your interest profile can evolve.
-            </h2>
+            <h2>Your interest profile can evolve.</h2>
 
             <p>
-              Explore your personalized skill gap analysis, compare your skills against industry standards, and generate an AI-powered learning roadmap.
+              Explore possible career paths, understand the skills they
+              require, and choose a personalized learning roadmap.
             </p>
           </div>
 
-          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+          <div className="career-explorer-footer-actions">
             <button
               className="profile-button"
-              onClick={() =>
-                navigate("/student/skills")
-              }
+              onClick={() => navigate("/student/career-paths")}
             >
-              <Puzzle size={17} style={{ marginRight: "6px" }} />
-              Analyze Skill Gaps
-              <ArrowRight size={17} style={{ marginLeft: "6px" }} />
+              <Compass size={17} />
+              Explore Career Paths
+              <ArrowRight size={17} />
             </button>
 
             <button
               className="profile-button"
-              style={{ background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)" }}
-              onClick={() =>
-                navigate("/student/roadmap")
-              }
-            >
-              <Sparkles size={17} style={{ marginRight: "6px" }} />
-              View Roadmap
-            </button>
-
-            <button
-              className="profile-button"
-              style={{ background: "transparent", border: "1px solid rgba(255, 255, 255, 0.1)" }}
-              onClick={() =>
-                navigate("/student/dashboard")
-              }
+              style={{
+                background: "transparent",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+              }}
+              onClick={() => navigate("/student/dashboard")}
             >
               Dashboard
             </button>

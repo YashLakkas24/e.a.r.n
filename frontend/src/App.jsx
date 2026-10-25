@@ -12,16 +12,18 @@ import InterestPlus from "./pages/Student/InterestPlus";
 import InterestQuestions from "./pages/Student/InterestQuestions";
 import InterestResult from "./pages/Student/InterestResult";
 import SkillGap from "./pages/Student/SkillGap";
+import CareerPathExplorer from "./pages/Student/CareerPathExplorer";
 import StudentRoadmap from "./pages/Student/StudentRoadmap";
 
 import ProtectedRoute from "./components/ProtectedRoute/ProtectedRoute";
-
+import NoticeUpload from "./pages/teachers-dash/NoticeUpload";
+import StudentPreferences from "./pages/Student/StudentPreferences";
+import NoticeHistory from "./pages/teachers-dash/NoticeHistory";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-
         {/* ==================================================
             PUBLIC ROUTES
         ================================================== */}
@@ -29,7 +31,6 @@ function App() {
         <Route path="/" element={<Landing />} />
 
         <Route path="/login" element={<Login />} />
-
 
         {/* ==================================================
             TEACHER ROUTES
@@ -53,7 +54,14 @@ function App() {
           }
         />
 
-
+        <Route
+          path="/teacher/notices"
+          element={
+            <ProtectedRoute allowedRole="teacher">
+              <NoticeUpload />
+            </ProtectedRoute>
+          }
+        />
         {/* ==================================================
             STUDENT ROUTES
         ================================================== */}
@@ -95,6 +103,15 @@ function App() {
         />
 
         <Route
+          path="/student/career-paths"
+          element={
+            <ProtectedRoute allowedRole="student">
+              <CareerPathExplorer />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/student/skills"
           element={
             <ProtectedRoute allowedRole="student">
@@ -120,7 +137,24 @@ function App() {
             </ProtectedRoute>
           }
         />
-      
+
+        <Route
+          path="/student/preferences"
+          element={
+            <ProtectedRoute allowedRole="student">
+              <StudentPreferences />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/teacher/notice-history"
+          element={
+            <ProtectedRoute allowedRole="teacher">
+              <NoticeHistory />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );

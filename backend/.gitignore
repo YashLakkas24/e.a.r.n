@@ -1,24 +1,27 @@
-# Environment variables (contains sensitive secrets/passwords)
+# Environment variables
 .env
 .env*.local
 
-# Python virtual environment
+# Python virtual environments
 venv/
 env/
 ENV/
 env.bak/
 venv.bak/
 
-# Python bytecode & cache
+# Python cache
 __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
 
-# IDE / Editor folders
+# IDE
 .vscode/
 .idea/
 
-# OS metadata
+# Uploaded files
+uploads/
+
+# OS
 .DS_Store
 Thumbs.db

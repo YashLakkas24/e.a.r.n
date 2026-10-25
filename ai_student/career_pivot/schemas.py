@@ -2,6 +2,42 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+EligibilityStatus = Literal[
+    "possible_now",
+    "possible_after_graduation",
+    "additional_qualification_required",
+    "needs_more_information",
+    "not_possible",
+]
+
+PathwayType = Literal[
+    "competitive_exam",
+    "direct_recruitment",
+    "higher_education",
+    "private_or_social_sector",
+    "mixed",
+    "other",
+]
+
+RoadmapStepType = Literal[
+    "eligibility_check",
+    "education",
+    "entrance_exam",
+    "competitive_exam",
+    "application",
+    "selection_stage",
+    "skill_development",
+    "experience",
+    "portfolio",
+    "job_search",
+    "other",
+]
+
+class CareerResource(BaseModel):
+    label: str
+    url: str
+    description: str = ""
+
 
 SkillLevel = Literal[
     "unknown",
@@ -29,6 +65,15 @@ class Direction(BaseModel):
     name: str
     fit_score: int = Field(ge=0, le=100)
     reason: str
+    # Increment when path discovery semantics change so cached activity-like
+    # recommendations are regenerated instead of silently reused.
+    pathway_version: Literal["career_role_routes_v3"] = "career_role_routes_v3"
+    pathway_type: PathwayType = "other"
+    pathway_summary: str = ""
+    eligibility_status: EligibilityStatus = "needs_more_information"
+    eligibility_reason: str = ""
+    missing_information: list[str] = Field(default_factory=list)
+    official_resources: list[CareerResource] = Field(default_factory=list)
 
 class DirectionDiscoveryResult(BaseModel):
     directions: list[Direction]
@@ -84,11 +129,31 @@ class SkillGapResult(BaseModel):
     skill_gaps: list[SkillGap]    
 
 
+
+class CareerSkillGapAnalysis(BaseModel):
+    """Core career analysis needed by the Skill Gaps page.
+
+    Roadmap generation is intentionally separate so these results can
+    be returned as soon as the skill assessment stages are complete.
+    """
+
+    direction: str
+    required_skills: list[SkillRequirement]
+    skill_assessments: list[SkillAssessment]
+    transferable_skills: list[TransferableSkill]
+    skill_gaps: list[SkillGap]
+
+
 class RoadmapStep(BaseModel):
     step: int
     title: str
     description: str
     skills: list[str]
+    route_type: RoadmapStepType = "skill_development"
+    estimated_duration: str = ""
+    completion_evidence: str = ""
+    official_resource_label: str = ""
+    official_resource_url: str = ""
 
 class TransitionRoadmapResult(BaseModel):
     transition_difficulty: Literal[

@@ -1,0 +1,365 @@
+.student-preferences-page {
+  min-height: 100vh;
+  display: flex;
+  background: #080d1b;
+  color: var(--color-text-primary);
+}
+
+
+/* ============================================================
+   MAIN
+============================================================ */
+
+.preferences-main {
+  position: relative;
+  min-width: 0;
+}
+
+
+/* ============================================================
+   PREFERENCES CARD
+============================================================ */
+
+.preferences-card {
+  max-width: 850px;
+  padding: 28px;
+  border: 1px solid rgba(113, 151, 255, 0.18);
+  border-radius: 16px;
+  background:
+    radial-gradient(
+      circle at 90% 0%,
+      rgba(112, 94, 255, 0.08),
+      transparent 35%
+    ),
+    rgba(255, 255, 255, 0.025);
+}
+
+
+.preferences-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+
+.preferences-icon {
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(76, 141, 255, 0.1);
+  color: #70a6ff;
+}
+
+
+.preferences-card h2 {
+  margin: 5px 0 0;
+  font-size: 22px;
+}
+
+
+.preferences-description {
+  max-width: 700px;
+  margin: 22px 0 18px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+
+/* ============================================================
+   EXAMPLES
+============================================================ */
+
+.preferences-examples {
+  padding: 13px 15px;
+  margin-bottom: 20px;
+  border: 1px solid rgba(76, 141, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(76, 141, 255, 0.045);
+}
+
+
+.preferences-examples span {
+  display: block;
+  margin-bottom: 4px;
+  color: #76aaff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+
+.preferences-examples p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+
+/* ============================================================
+   TEXTAREA
+============================================================ */
+
+.preferences-textarea {
+  width: 100%;
+  min-height: 190px;
+  padding: 15px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 11px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+  resize: vertical;
+  box-sizing: border-box;
+  transition: 0.2s ease;
+}
+
+
+.preferences-textarea::placeholder {
+  color: #657086;
+}
+
+
+.preferences-textarea:focus {
+  border-color: rgba(111, 166, 255, 0.55);
+  background: rgba(76, 141, 255, 0.04);
+}
+
+
+.preferences-textarea:disabled {
+  opacity: 0.6;
+}
+
+
+/* ============================================================
+   META
+============================================================ */
+
+.preferences-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  margin-top: 8px;
+  color: #68748b;
+  font-size: 10px;
+}
+
+
+.preferences-meta span:last-child {
+  text-align: right;
+}
+
+
+/* ============================================================
+   MESSAGES
+============================================================ */
+
+.preferences-success,
+.preferences-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 11px 13px;
+  border-radius: 9px;
+  font-size: 12px;
+}
+
+
+.preferences-success {
+  border: 1px solid rgba(76, 196, 125, 0.2);
+  background: rgba(76, 196, 125, 0.07);
+  color: #8ee0a7;
+}
+
+
+.preferences-error {
+  border: 1px solid rgba(255, 87, 87, 0.25);
+  background: rgba(255, 87, 87, 0.07);
+  color: #ff9b9b;
+}
+
+
+.preferences-loading {
+  padding: 45px 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  text-align: center;
+}
+
+
+/* ============================================================
+   ACTIONS
+============================================================ */
+
+.preferences-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 20px;
+}
+
+
+.preferences-clear,
+.preferences-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 15px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+
+.preferences-clear {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+
+
+.preferences-clear:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-primary);
+}
+
+
+.preferences-save {
+  border: 1px solid rgba(76, 141, 255, 0.35);
+  background: #477fe4;
+  color: white;
+}
+
+
+.preferences-save:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+
+.preferences-clear:disabled,
+.preferences-save:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+
+/* ============================================================
+   INFORMATION CARD
+============================================================ */
+
+.preferences-info {
+  max-width: 850px;
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+
+.preferences-info-icon {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: rgba(139, 103, 255, 0.1);
+  color: #ad91ff;
+}
+
+
+.preferences-info strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+
+.preferences-info p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+
+/* ============================================================
+   RESPONSIVE
+============================================================ */
+
+@media (max-width: 750px) {
+
+  .student-preferences-page {
+    flex-direction: column;
+  }
+
+  .student-sidebar {
+    width: 100%;
+    min-height: auto;
+    padding: 15px;
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .student-brand {
+    padding-bottom: 15px;
+  }
+
+  .student-nav {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .student-nav-item {
+    min-width: max-content;
+  }
+
+  .student-sidebar-bottom {
+    display: none;
+  }
+
+  .student-main {
+    padding: 25px 18px 40px;
+  }
+
+  .student-header {
+    flex-direction: column;
+  }
+
+  .preferences-card {
+    padding: 21px;
+  }
+
+  .preferences-meta {
+    flex-direction: column;
+  }
+
+  .preferences-meta span:last-child {
+    text-align: left;
+  }
+
+  .preferences-actions {
+    justify-content: stretch;
+  }
+
+  .preferences-clear,
+  .preferences-save {
+    flex: 1;
+    justify-content: center;
+  }
+}

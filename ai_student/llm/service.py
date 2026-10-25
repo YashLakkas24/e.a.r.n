@@ -1,4 +1,3 @@
-import os
 import json
 import time
 
@@ -7,6 +6,7 @@ from openai import (
     APIError,
     InternalServerError,
     APIConnectionError,
+    APITimeoutError,
     NotFoundError,
 )
 
@@ -42,13 +42,13 @@ from ai_student.career_pivot.schemas import (
 # OPENAI MODEL CONFIGURATION
 # ============================================================
 
-DEFAULT_MODEL = os.getenv("AI_MODEL", "gpt-5.4-mini")
+# Use one model consistently across all AI tasks in this service.
+# Environment variables intentionally cannot override this selection.
+MODEL_NAME = "gpt-5.4-nano"
 
-VALID_MODELS = [
-    DEFAULT_MODEL,
-]
-# Remove duplicates while preserving order
-VALID_MODELS = list(dict.fromkeys(VALID_MODELS))
+DEFAULT_MODEL = MODEL_NAME
+CAREER_PIVOT_MODEL = MODEL_NAME
+VALID_MODELS = [MODEL_NAME]
 
 
 def parse_json_from_llm(content: str) -> dict:
@@ -92,32 +92,78 @@ def safe_chat_completion(**kwargs):
     """
     Centralized OpenAI API call.
 
-    Uses GPT-5.4 mini as the single model.
-    Retries temporary API/server errors.
-    Does not perform model fallback or free-tier quota handling.
+    Uses one controlled retry for temporary failures.
+
+    The OpenAI client itself is configured with max_retries=0,
+    so retry behavior is controlled only here.
     """
 
-    max_retries = 3
+    max_retries = 1
     base_delay = 2.0
 
-    kwargs["model"] = kwargs.get("model", DEFAULT_MODEL)
+    kwargs["model"] = kwargs.get(
+        "model",
+        DEFAULT_MODEL,
+    )
 
-    # Use JSON output by default for our structured AI responses.
+    # JSON output by default.
     kwargs.setdefault(
         "response_format",
         {"type": "json_object"},
     )
 
-    for attempt in range(max_retries):
+    model = kwargs["model"]
+
+    for attempt in range(max_retries + 1):
+
+        start_time = time.perf_counter()
+
         try:
+
+            print(
+                f"[OpenAI] Request starting | "
+                f"model={model} | "
+                f"attempt={attempt + 1}/{max_retries + 1}",
+                flush=True,
+            )
+
             response = client.chat.completions.create(**kwargs)
+
+            elapsed = time.perf_counter() - start_time
+
+            print(
+                f"[OpenAI] Request completed | "
+                f"model={model} | "
+                f"time={elapsed:.2f}s",
+                flush=True,
+            )
 
             return response
 
-        except NotFoundError:
-            # Model/configuration problem.
-            # Retrying will not fix it.
-            raise
+        # ----------------------------------------------------
+        # TIMEOUT
+        # ----------------------------------------------------
+
+        except APITimeoutError as e:
+
+            elapsed = time.perf_counter() - start_time
+
+            print(
+                f"[OpenAI] TIMEOUT | " f"model={model} | " f"time={elapsed:.2f}s",
+                flush=True,
+            )
+
+            if attempt >= max_retries:
+                raise RuntimeError(
+                    f"OpenAI request timed out after "
+                    f"{elapsed:.1f}s for model '{model}'."
+                ) from e
+
+            time.sleep(base_delay)
+
+        # ----------------------------------------------------
+        # CONNECTION / SERVER / RATE LIMIT
+        # ----------------------------------------------------
 
         except (
             RateLimitError,
@@ -125,22 +171,40 @@ def safe_chat_completion(**kwargs):
             APIConnectionError,
         ) as e:
 
-            if attempt == max_retries - 1:
+            elapsed = time.perf_counter() - start_time
+
+            print(
+                f"[OpenAI] Temporary error | "
+                f"model={model} | "
+                f"time={elapsed:.2f}s | "
+                f"error={type(e).__name__}",
+                flush=True,
+            )
+
+            if attempt >= max_retries:
                 raise
 
             sleep_time = base_delay * (attempt + 1)
 
             print(
-                f"[OpenAI] Temporary error "
-                f"(attempt {attempt + 1}/{max_retries}). "
-                f"Retrying in {sleep_time:.0f}s...",
+                f"[OpenAI] Retrying in " f"{sleep_time:.0f}s...",
                 flush=True,
             )
 
             time.sleep(sleep_time)
 
+        # ----------------------------------------------------
+        # MODEL / CONFIGURATION ERROR
+        # ----------------------------------------------------
+
+        except NotFoundError:
+            raise
+
+        # ----------------------------------------------------
+        # OTHER OPENAI API ERRORS
+        # ----------------------------------------------------
+
         except APIError:
-            # Other OpenAI API errors should be surfaced directly.
             raise
 
 
@@ -372,7 +436,7 @@ def generate_interest_analysis(
         None,
     )
     print(
-        f"[Gemini] Interest Analysis finish reason: {finish_reason}",
+        f"[OpenAI] Interest Analysis finish reason: {finish_reason}",
         flush=True,
     )
 
@@ -405,11 +469,27 @@ def generate_direction_discovery(
     existing_skills: list[str] | None = None,
     previous_interests: list[str] | None = None,
     interest_analysis: dict | None = None,
+    student_profile: dict | None = None,
+    rejected_directions: list[str] | None = None,
 ) -> DirectionDiscoveryResult:
 
     existing_skills = existing_skills or []
     previous_interests = previous_interests or []
     interest_analysis = interest_analysis or {}
+    student_profile = student_profile or {}
+    rejected_directions = rejected_directions or []
+
+    rejected_titles_note = ""
+    if rejected_directions:
+        rejected_titles_note = (
+            "\nREJECTED TITLES — DO NOT REPEAT\n"
+            + json.dumps(rejected_directions, ensure_ascii=False)
+            + "\nThese titles were rejected because they were activities, generic "
+            "interests, or not recognizable occupational roles. Replace them "
+            "with concrete job titles / occupational families. Exam names, "
+            "degrees, projects and preparation activities are entry-route steps, "
+            "not career titles. Return five distinct role titles.\n"
+        )
 
     user_prompt = f"""
 Current interest:
@@ -424,16 +504,21 @@ Previous interests:
 Interest analysis:
 {json.dumps(interest_analysis, indent=2)}
 
-Identify approximately 3 to 5 realistic directions
-that this student could explore.
+Career eligibility profile:
+{json.dumps(student_profile, indent=2)}
+{rejected_titles_note}
 
-Base the directions only on the information provided.
-Do not invent skills, experience, achievements, or interests.
+Identify exactly 5 realistic career roles or specialization pathways. For each,
+provide the pathway type, a concise entry-route summary, and a conservative
+eligibility status based on the supplied profile. Missing profile facts must
+produce "needs_more_information", not "not_possible". Do not invent official
+exam dates, vacancies, or eligibility rules.
 
-Return ONLY valid JSON.
+Use only the JSON structure defined in the system instructions.
 """
 
     response = safe_chat_completion(
+        model=CAREER_PIVOT_MODEL,
         messages=[
             {
                 "role": "system",
@@ -460,6 +545,51 @@ Return ONLY valid JSON.
         ) from e
 
     try:
+        # Normalize common LLM enum variations conservatively before schema
+        # validation. In particular, "not eligible now" must not become an
+        # absolute "not possible" decision.
+        status_aliases = {
+            "eligible_now": "possible_now",
+            "possible": "possible_now",
+            "eligible_after_graduation": "possible_after_graduation",
+            "after_graduation": "possible_after_graduation",
+            "requires_additional_qualification": "additional_qualification_required",
+            "further_qualification_required": "additional_qualification_required",
+            "needs_more_info": "needs_more_information",
+            "unknown": "needs_more_information",
+            "not_eligible": "needs_more_information",
+            "not_eligible_currently": "needs_more_information",
+            "blocked": "not_possible",
+        }
+        pathway_aliases = {
+            "government_exam": "competitive_exam",
+            "recruitment_exam": "competitive_exam",
+            "degree_admission": "higher_education",
+            "further_study": "higher_education",
+            "public_sector": "direct_recruitment",
+            "ngo": "private_or_social_sector",
+            "social_sector": "private_or_social_sector",
+        }
+
+        directions = data.get("directions", []) if isinstance(data, dict) else []
+        for direction in directions:
+            if not isinstance(direction, dict):
+                continue
+            status = str(direction.get("eligibility_status", "needs_more_information")).strip().lower().replace(" ", "_")
+            direction["eligibility_status"] = status_aliases.get(status, status)
+            pathway_type = str(direction.get("pathway_type", "other")).strip().lower().replace(" ", "_")
+            direction["pathway_type"] = pathway_aliases.get(pathway_type, pathway_type)
+
+            missing = direction.get("missing_information", [])
+            if isinstance(missing, str):
+                direction["missing_information"] = [missing] if missing.strip() else []
+            elif not isinstance(missing, list):
+                direction["missing_information"] = []
+
+            # Incomplete facts cannot justify an absolute negative decision.
+            if direction["eligibility_status"] == "not_possible" and direction["missing_information"]:
+                direction["eligibility_status"] = "needs_more_information"
+
         return DirectionDiscoveryResult.model_validate(data)
 
     except Exception as e:
@@ -541,6 +671,7 @@ Return ONLY valid JSON in this structure:
 """
 
     response = safe_chat_completion(
+        model=CAREER_PIVOT_MODEL,
         messages=[
             {
                 "role": "system",
@@ -570,12 +701,12 @@ Return ONLY valid JSON in this structure:
     )
 
     print(
-        f"\n[Gemini] Skill Discovery finish reason: " f"{finish_reason}",
+        f"\n[OpenAI] Skill Discovery finish reason: {finish_reason}",
         flush=True,
     )
 
     if content is None:
-        raise ValueError("Gemini returned an empty response for skill discovery.")
+        raise ValueError("OpenAI returned an empty response for skill discovery.")
 
     content = content.strip()
 
@@ -583,9 +714,9 @@ Return ONLY valid JSON in this structure:
     # DEBUG
     # --------------------------------------------------------
 
-    print("\n[Gemini Skill Discovery Raw Response]")
+    print("\n[OpenAI Skill Discovery Raw Response]")
     print(content)
-    print("[End Gemini Skill Discovery Raw Response]\n")
+    print("[End OpenAI Skill Discovery Raw Response]\n")
 
     # --------------------------------------------------------
     # PARSE JSON
@@ -726,7 +857,13 @@ NEVER output:
 Return ONLY valid JSON.
 """
 
+    print(
+        "\n[STAGE 3] Calling OpenAI for Skill Assessment...",
+        flush=True,
+    )
+
     response = safe_chat_completion(
+        model=CAREER_PIVOT_MODEL,
         messages=[
             {
                 "role": "system",
@@ -737,10 +874,44 @@ Return ONLY valid JSON.
                 "content": user_prompt,
             },
         ],
-        max_completion_tokens=5000,
+        max_completion_tokens=4000,
     )
 
-    content = response.choices[0].message.content.strip()
+    print(
+        "[STAGE 3] OpenAI returned Skill Assessment response.",
+        flush=True,
+    )
+
+    if not response.choices:
+        raise ValueError("Stage 3 Skill Assessment: OpenAI returned no choices.")
+
+    finish_reason = getattr(
+        response.choices[0],
+        "finish_reason",
+        None,
+    )
+
+    content = response.choices[0].message.content
+
+    print(
+        f"[STAGE 3] Finish reason: {finish_reason}",
+        flush=True,
+    )
+
+    if not content:
+        raise ValueError("Stage 3 Skill Assessment: OpenAI returned empty content.")
+
+    content = content.strip()
+
+    if finish_reason in (
+        "length",
+        "max_tokens",
+        "MAX_TOKENS",
+    ):
+        raise ValueError(
+            "Stage 3 Skill Assessment was truncated "
+            "because the token limit was reached."
+        )
 
     try:
         data = parse_json_from_llm(content)
@@ -871,7 +1042,13 @@ Important:
 Return ONLY valid JSON.
 """
 
+    print(
+        "\n[STAGE 4] Calling OpenAI for Transferable Skills...",
+        flush=True,
+    )
+
     response = safe_chat_completion(
+        model=CAREER_PIVOT_MODEL,
         messages=[
             {
                 "role": "system",
@@ -882,14 +1059,49 @@ Return ONLY valid JSON.
                 "content": user_prompt,
             },
         ],
-        max_completion_tokens=4000,
+        max_completion_tokens=3000,
         response_format={
             "type": "json_object",
         },
     )
 
-    content = response.choices[0].message.content.strip()
+    print(
+        "[STAGE 4] OpenAI returned Transferable Skills response.",
+        flush=True,
+    )
 
+    if not response.choices:
+        raise ValueError("Stage 4 Transferable Skills: " "OpenAI returned no choices.")
+
+    finish_reason = getattr(
+        response.choices[0],
+        "finish_reason",
+        None,
+    )
+
+    content = response.choices[0].message.content
+
+    print(
+        f"[STAGE 4] Finish reason: {finish_reason}",
+        flush=True,
+    )
+
+    if not content:
+        raise ValueError(
+            "Stage 4 Transferable Skills: " "OpenAI returned empty content."
+        )
+
+    content = content.strip()
+
+    if finish_reason in (
+        "length",
+        "max_tokens",
+        "MAX_TOKENS",
+    ):
+        raise ValueError(
+            "Stage 4 Transferable Skills was truncated "
+            "because the token limit was reached."
+        )
     try:
         data = parse_json_from_llm(content)
 
@@ -923,94 +1135,187 @@ def generate_skill_gap_analysis(
     transferable_skills: list,
 ) -> SkillGapResult:
 
-    required_skills_data = [
-        skill.model_dump() if hasattr(skill, "model_dump") else skill
-        for skill in required_skills
-    ]
-
-    skill_assessments_data = [
-        assessment.model_dump() if hasattr(assessment, "model_dump") else assessment
-        for assessment in skill_assessments
-    ]
-
-    transferable_skills_data = [
-        skill.model_dump() if hasattr(skill, "model_dump") else skill
-        for skill in transferable_skills
-    ]
-
-    user_prompt = f"""
-TARGET DIRECTION
-----------------
-{direction}
-
-REQUIRED SKILLS DISCOVERED BY STAGE 2
--------------------------------------
-{json.dumps(required_skills_data, indent=2)}
-
-CURRENT SKILL ASSESSMENTS FROM STAGE 3
---------------------------------------
-{json.dumps(skill_assessments_data, indent=2)}
-
-TRANSFERABLE SKILLS FROM STAGE 4
---------------------------------
-{json.dumps(transferable_skills_data, indent=2)}
-
-TASK
-----
-Analyze the skill gaps for ONLY this target direction.
-
-For every required skill:
-
-1. Use the required level provided by Stage 2.
-2. Use the current level provided by Stage 3.
-3. Preserve "unknown" when the current level is unknown.
-4. Consider transferable skills only as supporting context.
-5. Do not treat transferable skills as proof of the target skill.
-6. Determine the appropriate skill-gap status.
-7. Explain the result using only the provided evidence.
-
-Every required skill must appear exactly once.
-
-Do not add new skills.
-
-Return ONLY valid JSON.
-"""
-
-    response = safe_chat_completion(
-        messages=[
-            {
-                "role": "system",
-                "content": SKILL_GAP_SYSTEM_PROMPT,
-            },
-            {
-                "role": "user",
-                "content": user_prompt,
-            },
-        ],
-        max_completion_tokens=4000,
-        response_format={
-            "type": "json_object",
-        },
+    print(
+        "\n[STAGE 5] Running deterministic Skill Gap Analysis...",
+        flush=True,
     )
 
-    content = response.choices[0].message.content.strip()
+    # --------------------------------------------------------
+    # Skill level ordering
+    # --------------------------------------------------------
 
-    try:
-        data = parse_json_from_llm(content)
+    LEVEL_ORDER = {
+        "unknown": 0,
+        "beginner": 1,
+        "developing": 2,
+        "intermediate": 3,
+        "strong": 4,
+        "advanced": 5,
+    }
 
-    except Exception as e:
-        raise ValueError(
-            "LLM did not return valid JSON for skill gap analysis.\n\n"
-            f"Response:\n{content}"
-        ) from e
+    # --------------------------------------------------------
+    # Normalize assessment lookup
+    # --------------------------------------------------------
 
-    try:
-        return SkillGapResult.model_validate(data)
+    assessment_map = {}
 
-    except Exception as e:
-        raise ValueError(
-            "LLM output does not match " "SkillGapResult schema.\n\n" f"Data:\n{data}"
-        ) from e
+    for assessment in skill_assessments:
+
+        skill_name = assessment.skill.strip().lower()
+
+        assessment_map[skill_name] = assessment
+
+    # --------------------------------------------------------
+    # Transferable skills lookup
+    #
+    # Used only as supporting context.
+    # It does NOT change current_level.
+    # --------------------------------------------------------
+
+    transferable_names = {skill.skill.strip().lower() for skill in transferable_skills}
+
+    skill_gaps = []
+
+    # --------------------------------------------------------
+    # Analyze EVERY required skill
+    # --------------------------------------------------------
+
+    for required in required_skills:
+
+        skill_name = required.skill
+
+        required_level = required.required_level
+
+        assessment = assessment_map.get(skill_name.strip().lower())
+
+        # ----------------------------------------------------
+        # No assessment found
+        # ----------------------------------------------------
+
+        if assessment is None:
+
+            current_level = "unknown"
+
+            status = "assessment_needed"
+
+            explanation = (
+                "No current assessment evidence is available "
+                "for this skill, so the student's level cannot "
+                "be reliably determined."
+            )
+
+        else:
+
+            current_level = assessment.current_level
+
+            # ------------------------------------------------
+            # UNKNOWN
+            # ------------------------------------------------
+
+            if current_level == "unknown":
+
+                status = "assessment_needed"
+
+                explanation = (
+                    "The student's current level could not be "
+                    "established from the available evidence. "
+                    "Additional assessment is needed before "
+                    "classifying this as a confirmed skill gap."
+                )
+
+            else:
+
+                current_score = LEVEL_ORDER[current_level]
+                required_score = LEVEL_ORDER[required_level]
+
+                # --------------------------------------------
+                # REQUIREMENT MET
+                # --------------------------------------------
+
+                if current_score >= required_score:
+
+                    status = "no_gap"
+
+                    explanation = (
+                        f"The assessed level is "
+                        f"{current_level}, which meets or "
+                        f"exceeds the required level of "
+                        f"{required_level}."
+                    )
+
+                # --------------------------------------------
+                # ONE LEVEL BELOW
+                # --------------------------------------------
+
+                elif required_score - current_score == 1:
+
+                    status = "small_gap"
+
+                    explanation = (
+                        f"The assessed level is "
+                        f"{current_level}, one level below "
+                        f"the required {required_level} level. "
+                        f"This indicates a relatively small "
+                        f"development gap."
+                    )
+
+                # --------------------------------------------
+                # SUBSTANTIAL GAP
+                # --------------------------------------------
+
+                else:
+
+                    status = "actual_gap"
+
+                    explanation = (
+                        f"The assessed level is "
+                        f"{current_level}, substantially below "
+                        f"the required {required_level} level. "
+                        f"This skill should be prioritized for "
+                        f"development."
+                    )
+
+        # ----------------------------------------------------
+        # Add transferable context
+        # ----------------------------------------------------
+
+        if skill_name.strip().lower() in transferable_names and status != "no_gap":
+
+            explanation += (
+                " Related transferable experience may provide "
+                "a useful foundation for developing this skill."
+            )
+
+        # ----------------------------------------------------
+        # Create validated result
+        # ----------------------------------------------------
+
+        skill_gaps.append(
+            {
+                "skill": skill_name,
+                "current_level": current_level,
+                "required_level": required_level,
+                "status": status,
+                "explanation": explanation,
+            }
+        )
+
+    # --------------------------------------------------------
+    # Final result
+    # --------------------------------------------------------
+
+    result = SkillGapResult(
+        direction=direction,
+        skill_gaps=skill_gaps,
+    )
+
+    print(
+        f"[STAGE 5] Completed deterministic Skill Gap Analysis. "
+        f"Skills analyzed: {len(skill_gaps)}",
+        flush=True,
+    )
+
+    return result
 
 
 # ============================================================
@@ -1026,6 +1331,9 @@ def generate_transition_roadmap(
     skill_assessments: list | None = None,
     transferable_skills: list | None = None,
     skill_gaps: list | None = None,
+    student_profile: dict | None = None,
+    official_resources: list[dict] | None = None,
+    career_path: dict | None = None,
 ) -> TransitionRoadmapResult:
 
     existing_skills = existing_skills or []
@@ -1034,6 +1342,9 @@ def generate_transition_roadmap(
     skill_assessments = skill_assessments or []
     transferable_skills = transferable_skills or []
     skill_gaps = skill_gaps or []
+    student_profile = student_profile or {}
+    official_resources = official_resources or []
+    career_path = career_path or {}
 
     user_prompt = f"""
 TARGET DIRECTION
@@ -1047,6 +1358,24 @@ EXISTING STUDENT SKILLS
 PREVIOUS INTERESTS
 ------------------
 {json.dumps(previous_interests, indent=2)}
+
+CAREER ELIGIBILITY PROFILE
+--------------------------
+{json.dumps(student_profile, indent=2)}
+
+SELECTED CAREER PATH ASSESSMENT
+-------------------------------
+{json.dumps(career_path, indent=2)}
+
+Use this selected-path assessment as the primary career context. Preserve its
+eligibility status and the specific entry-route summary. Do not replace a
+verified "not_possible" decision with a generic skill-development roadmap.
+If eligibility is "needs_more_information", place verification of those exact
+facts before exam/application steps.
+
+OFFICIAL RESOURCE ALLOWLIST (URLs only from this list may be returned)
+----------------------------------------------------------------------
+{json.dumps(official_resources, indent=2)}
 
 REQUIRED SKILLS FROM STAGE 2
 ----------------------------
@@ -1106,7 +1435,13 @@ Use only the information provided above.
 Return ONLY valid JSON.
 """
 
+    print(
+        "\n[STAGE 6] Calling OpenAI for Transition Roadmap...",
+        flush=True,
+    )
+
     response = safe_chat_completion(
+        model=CAREER_PIVOT_MODEL,
         messages=[
             {
                 "role": "system",
@@ -1117,13 +1452,49 @@ Return ONLY valid JSON.
                 "content": user_prompt,
             },
         ],
-        max_completion_tokens=5000,
+        max_completion_tokens=4000,
         response_format={
             "type": "json_object",
         },
     )
 
-    content = response.choices[0].message.content.strip()
+    print(
+        "[STAGE 6] OpenAI returned Transition Roadmap response.",
+        flush=True,
+    )
+
+    if not response.choices:
+        raise ValueError("Stage 6 Transition Roadmap: " "OpenAI returned no choices.")
+
+    finish_reason = getattr(
+        response.choices[0],
+        "finish_reason",
+        None,
+    )
+
+    content = response.choices[0].message.content
+
+    print(
+        f"[STAGE 6] Finish reason: {finish_reason}",
+        flush=True,
+    )
+
+    if not content:
+        raise ValueError(
+            "Stage 6 Transition Roadmap: " "OpenAI returned empty content."
+        )
+
+    content = content.strip()
+
+    if finish_reason in (
+        "length",
+        "max_tokens",
+        "MAX_TOKENS",
+    ):
+        raise ValueError(
+            "Stage 6 Transition Roadmap was truncated "
+            "because the token limit was reached."
+        )
 
     try:
         data = parse_json_from_llm(content)
@@ -1135,7 +1506,20 @@ Return ONLY valid JSON.
         ) from e
 
     try:
-        return TransitionRoadmapResult.model_validate(data)
+        result = TransitionRoadmapResult.model_validate(data)
+        # Never expose model-invented or unapproved URLs as official sources.
+        allowed = {
+            item.get("url"): item.get("label", "")
+            for item in official_resources
+            if item.get("url")
+        }
+        for step in result.roadmap:
+            if step.official_resource_url not in allowed:
+                step.official_resource_url = ""
+                step.official_resource_label = ""
+            elif step.official_resource_label != allowed[step.official_resource_url]:
+                step.official_resource_label = allowed[step.official_resource_url]
+        return result
 
     except Exception as e:
         raise ValueError(

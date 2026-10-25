@@ -1,15 +1,18 @@
-
 import { getAuth, signInWithCustomToken } from "firebase/auth";
 import app from "../firebase";
 
-const API_URL = "http://127.0.0.1:8000";
+// Fallback to local server if environment variables are missing, and strip trailing slashes
+const RAW_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL = RAW_URL.replace(/\/$/, "");
+
+console.log("API_BASE_URL:", API_BASE_URL);
 const auth = getAuth(app);
 
 function withTimeout(promise, milliseconds, message) {
   return Promise.race([
     promise,
     new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(message)), milliseconds)
+      setTimeout(() => reject(new Error(message)), milliseconds),
     ),
   ]);
 }
@@ -26,7 +29,7 @@ function withTimeout(promise, milliseconds, message) {
  * → localStorage
  */
 export async function submitLogin(role, id, password) {
-  if (!id.trim() || !password.trim()) {
+  if (!id?.trim() || !password?.trim()) {
     throw new Error("Please enter both an ID and a password.");
   }
 
@@ -39,7 +42,7 @@ export async function submitLogin(role, id, password) {
 
   try {
     response = await withTimeout(
-      fetch(`${API_URL}/api/auth/login`, {
+      fetch(`${API_BASE_URL}/api/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -51,16 +54,16 @@ export async function submitLogin(role, id, password) {
           role,
         }),
       }),
-      15000,
-      "Backend login timed out. Please make sure FastAPI is running."
+      60000,
+      "Backend login timed out. Please try again.",
     );
   } catch (error) {
-    if (error.message.includes("timed out")) {
+    if (error.message?.includes("timed out")) {
       throw error;
     }
 
     throw new Error(
-      "Cannot connect to the backend server. Please ensure FastAPI is running on http://127.0.0.1:8000."
+      `Cannot connect to backend at ${API_BASE_URL}. Please check if your FastAPI backend is running.`,
     );
   }
 
@@ -76,7 +79,9 @@ export async function submitLogin(role, id, password) {
   // 2. Check backend authentication
   // --------------------------------------------------
   if (!response.ok) {
-    throw new Error(data?.detail || "Invalid ID or password.");
+    throw new Error(
+      data?.detail || `Server error (${response.status}): Invalid ID or password.`,
+    );
   }
 
   // --------------------------------------------------
@@ -84,7 +89,7 @@ export async function submitLogin(role, id, password) {
   // --------------------------------------------------
   if (!data?.firebase_token) {
     throw new Error(
-      "Login successful, but Firebase authentication token was not received."
+      "Login successful, but Firebase authentication token was not received from backend.",
     );
   }
 
@@ -106,7 +111,7 @@ export async function submitLogin(role, id, password) {
     const userCredential = await withTimeout(
       signInWithCustomToken(auth, data.firebase_token),
       15000,
-      "Firebase login timed out. Please check your Firebase configuration and internet connection."
+      "Firebase login timed out. Please check your Firebase configuration and internet connection.",
     );
 
     firebaseUser = userCredential.user;
@@ -115,7 +120,7 @@ export async function submitLogin(role, id, password) {
 
     throw new Error(
       error.message ||
-      "PostgreSQL login succeeded, but Firebase authentication failed."
+        "PostgreSQL login succeeded, but Firebase authentication failed.",
     );
   }
 
@@ -128,14 +133,14 @@ export async function submitLogin(role, id, password) {
     firebaseIdToken = await withTimeout(
       firebaseUser.getIdToken(true),
       15000,
-      "Firebase ID token request timed out."
+      "Firebase ID token request timed out.",
     );
   } catch (error) {
     console.error("Firebase ID token error:", error);
 
     throw new Error(
       error.message ||
-      "Firebase login succeeded, but the Firebase ID token could not be obtained."
+        "Firebase login succeeded, but the Firebase ID token could not be obtained.",
     );
   }
 
@@ -166,9 +171,7 @@ export async function submitLogin(role, id, password) {
     firebaseIdToken,
     firebaseUser,
     redirectTo:
-      data.role === "teacher"
-        ? "/teacher/dashboard"
-        : "/student/dashboard",
+      data.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard",
   };
 }
 
@@ -223,4 +226,3 @@ export function getLoggedInUser() {
 export function isLoggedIn() {
   return auth.currentUser !== null;
 }
-

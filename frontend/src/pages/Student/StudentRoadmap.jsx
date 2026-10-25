@@ -18,6 +18,7 @@ import {
 import {
   getStudentRoadmap,
   getStudentCareerDirections,
+  getStudentCareerEligibilityProfile,
 } from "../../services/studentService";
 import "./StudentRoadmap.css";
 
@@ -253,7 +254,7 @@ function StudentRoadmap() {
   const [roadmapData, setRoadmapData] = useState(null);
   const [roadmapTasks, setRoadmapTasks] = useState([]);
   const [selectedDirection, setSelectedDirection] = useState(
-    location.state?.direction || null
+    location.state?.direction || null,
   );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -271,6 +272,47 @@ function StudentRoadmap() {
 
   const studentId = getStudentId();
 
+  const waitForRoadmap = async (direction) => {
+    // If the user opens the roadmap before core skill-gap analysis exists,
+    // the backend completes that first and then generates the roadmap.
+    const deadline = Date.now() + 6 * 60 * 1000;
+    let delayMs = 2000;
+
+    while (Date.now() < deadline) {
+      const res = await getStudentRoadmap(studentId, direction);
+
+      if (
+        (res.status === "completed" && res.has_analysis) ||
+        (res.status === "blocked" && res.has_analysis) ||
+        res.status === "profile_required" ||
+        res.status === "path_not_found"
+      ) {
+        return res;
+      }
+
+      if (res.status === "missing") {
+        throw new Error(res.detail || "Roadmap analysis is unavailable.");
+      }
+
+      if (res.status === "error") {
+        throw new Error(res.detail || "Roadmap analysis failed.");
+      }
+
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) break;
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(delayMs, remainingMs)),
+      );
+      delayMs = Math.min(Math.round(delayMs * 1.35), 5000);
+    }
+
+    throw new Error(
+      "Roadmap generation is taking longer than expected. " +
+        "The job may still be running; try again shortly.",
+    );
+  };
+
   useEffect(() => {
     let isMounted = true;
 
@@ -281,6 +323,13 @@ function StudentRoadmap() {
 
         let availableDirections = [];
 
+        const eligibilityProfile = await getStudentCareerEligibilityProfile(studentId);
+        if (!eligibilityProfile.has_profile) {
+          navigate("/student/career-paths", { replace: true });
+          return;
+        }
+
+        let availableDirs = [];
         try {
           const directionResponse =
             await getStudentCareerDirections(studentId);
@@ -327,12 +376,53 @@ function StudentRoadmap() {
           setSelectedDirection(response.direction);
         } else {
           setSelectedDirection(targetDirection);
+        const selectedPath =
+          availableDirs.find((item) => item.name === targetDir) ||
+          (location.state?.careerPath?.name === targetDir
+            ? location.state.careerPath
+            : null);
+
+        // Do not generate a seemingly actionable roadmap for a path explicitly
+        // flagged as blocked by the eligibility triage.
+        if (selectedPath?.eligibility_status === "not_possible") {
+          if (isMounted) {
+            setSelectedDirection(targetDir);
+            setRoadmapData({
+              direction: targetDir,
+              roadmap: [],
+              blocked_path: true,
+              transition_reason: selectedPath.eligibility_reason || "",
+            });
+          }
+          return;
+        }
+
+        const res = await waitForRoadmap(targetDir);
+
+        if (res.status === "profile_required" || res.status === "path_not_found") {
+          navigate("/student/career-paths", { replace: true });
+          return;
+        }
+
+        if (isMounted) {
+          if (res.has_analysis === false) {
+            setError(
+              res.detail ||
+                "Interest profile is not ready yet. Please complete the Interest+ discovery quiz first.",
+            );
+            setRoadmapData(null);
+          } else {
+            setRoadmapData(res);
+            if (res.direction && !selectedDirection) {
+              setSelectedDirection(res.direction);
+            }
+          }
         }
       } catch (err) {
         if (isMounted) {
           setError(
             err.message ||
-              "Failed to load your roadmap. Please check your backend connection."
+              "Failed to load your roadmap. Please check your backend connection." 
           );
         }
       } finally {
@@ -345,9 +435,45 @@ function StudentRoadmap() {
     return () => {
       isMounted = false;
     };
-  }, [studentId]);
+  }, [studentId, navigate]);
+
+  const handleSelectDirection = async (dirName) => {
+    if (dirName === selectedDirection && roadmapData) return;
+    try {
+      setSelectedDirection(dirName);
+      setLoading(true);
+      setError("");
+      const selectedPath = directions.find((item) => item.name === dirName);
+      if (selectedPath?.eligibility_status === "not_possible") {
+        setRoadmapData({
+          direction: dirName,
+          roadmap: [],
+          blocked_path: true,
+          transition_reason: selectedPath.eligibility_reason || "",
+        });
+        return;
+      }
+      const res = await waitForRoadmap(dirName);
+      if (res.has_analysis) {
+        setRoadmapData(res);
+      } else {
+        setError(res.detail || "Roadmap unavailable for this direction.");
+      }
+    } catch (err) {
+      setError(err.message || "Failed to generate roadmap for direction.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRefresh = async () => {
+    const direction = selectedDirection || roadmapData?.direction;
+
+    if (!direction) {
+      setError("No career direction is selected.");
+      return;
+    }
+
     try {
       setRefreshing(true);
       setError("");
@@ -366,6 +492,27 @@ function StudentRoadmap() {
       if (response?.has_analysis === false) {
         setError(response.detail || "Your roadmap is not available yet.");
         return;
+      // Start a new analysis
+      const initial = await getStudentRoadmap(studentId, direction, true);
+
+      if (initial.status === "processing") {
+        const finalRes = await waitForRoadmap(direction);
+
+        if (finalRes.has_analysis) {
+          setRoadmapData(finalRes);
+        } else {
+          setError(
+            finalRes.detail || "Roadmap analysis could not be completed.",
+          );
+        }
+
+        return;
+      }
+
+      if (initial.has_analysis) {
+        setRoadmapData(initial);
+      } else {
+        setError(initial.detail || "Roadmap analysis is unavailable.");
       }
 
       setRoadmapData(response);
@@ -399,6 +546,7 @@ function StudentRoadmap() {
           <div className="roadmap-brand">
             <Sparkles size={19} />
             <span>E.A.R.N. Roadmap</span>
+            <span>Career Entry Roadmap</span>
           </div>
         </header>
 
@@ -575,6 +723,18 @@ function StudentRoadmap() {
     roadmapData?.direction ||
     selectedDirection ||
     "Explore legal internships";
+  const steps = roadmapData?.roadmap || [];
+  const selectedCareerPath =
+    directions.find((item) => item.name === (roadmapData?.direction || selectedDirection)) ||
+    location.state?.careerPath ||
+    roadmapData?.career_path ||
+    null;
+  const isBlockedPath =
+    roadmapData?.blocked_path ||
+    selectedCareerPath?.eligibility_status === "not_possible";
+  const diffCfg =
+    DIFFICULTY_CONFIG[roadmapData?.transition_difficulty] ||
+    DIFFICULTY_CONFIG.moderate;
 
   return (
     <div className="roadmap-page">
@@ -603,6 +763,13 @@ function StudentRoadmap() {
             className={refreshing ? "roadmap-spin-icon" : ""}
           />
           {refreshing ? "Refreshing..." : "Refresh"}
+          title={isBlockedPath
+            ? "This path is flagged as not possible under the supplied profile. Review the eligibility details and official source links."
+            : "Rebuild the career-entry roadmap from the selected role and saved eligibility profile"}
+          disabled={refreshing || isBlockedPath}
+        >
+          <RotateCcw size={14} className={refreshing ? "spin-icon" : ""} />
+          {isBlockedPath ? "Eligibility blocked" : refreshing ? "Synthesizing..." : "Regenerate Path"}
         </button>
       </header>
 
@@ -636,6 +803,170 @@ function StudentRoadmap() {
           </div>
         )}
 
+          <span className="roadmap-eyebrow">STEP-BY-STEP TRANSITION PATH</span>
+          <h1>Career Entry Roadmap</h1>
+          <p>
+            Follow the qualification, exam or admission steps, applications,
+            and targeted preparation needed to pursue{" "}
+            <strong>{roadmapData?.direction || "your selected role"}</strong>.
+          </p>
+        </section>
+
+        {/* Direction Switcher */}
+        {directions.length > 0 && (
+          <section className="directions-selector-section">
+            <span className="section-small-label">
+              SWITCH CAREER DIRECTION:
+            </span>
+            <div className="directions-tabs">
+              {directions.map((dir, idx) => {
+                const isActive =
+                  (selectedDirection || roadmapData?.direction) === dir.name;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    className={`direction-tab-btn ${isActive ? "active" : ""}`}
+                    onClick={() => handleSelectDirection(dir.name)}
+                  >
+                    <span className="dir-name">{dir.name}</span>
+                    {dir.fit_score != null && (
+                      <span className="dir-fit">{dir.fit_score}% Fit</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Direction & Difficulty Summary Card */}
+        <section className="roadmap-summary-card">
+          <div className="summary-left">
+            <div className="summary-icon">
+              <Compass size={26} />
+            </div>
+            <div>
+              <span className="summary-label">SELECTED CAREER PATH</span>
+              <h2>{roadmapData?.direction}</h2>
+              <div className="difficulty-badge-wrap">
+                {isBlockedPath ? (
+                  <span className="pathway-blocked-badge">
+                    <AlertTriangle size={13} /> NOT POSSIBLE
+                  </span>
+                ) : roadmapData?.transition_difficulty ? (
+                  <span className={`diff-pill ${diffCfg.badgeClass}`}>
+                    {diffCfg.label}
+                  </span>
+                ) : null}
+                <span className="milestones-count">
+                  {isBlockedPath ? "Eligibility barrier identified" : `${steps.length} Entry Steps`}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="summary-actions">
+            {isBlockedPath ? (
+              <button
+                className="action-btn secondary"
+                onClick={() => navigate("/student/career-paths")}
+              >
+                <Compass size={16} />
+                Explore other pathways
+              </button>
+            ) : (
+              <button
+                className="action-btn secondary"
+                onClick={() =>
+                  navigate("/student/skills", {
+                    state: { direction: roadmapData?.direction },
+                  })
+                }
+              >
+                <Puzzle size={16} />
+                Review Skill Gaps
+              </button>
+            )}
+          </div>
+
+          {selectedCareerPath?.pathway_summary && (
+            <div className="entry-route-summary roadmap-entry-summary">
+              <strong>Typical entry route</strong>
+              <p>{selectedCareerPath.pathway_summary}</p>
+            </div>
+          )}
+
+          {selectedCareerPath?.eligibility_reason && (
+            <div className={`roadmap-eligibility-reason ${isBlockedPath ? "blocked" : ""}`}>
+              {isBlockedPath && <AlertTriangle size={17} />}
+              <div>
+                <strong>
+                  {isBlockedPath ? "Why this route is flagged" : "Eligibility assessment"}
+                </strong>
+                <p>{selectedCareerPath.eligibility_reason}</p>
+              </div>
+            </div>
+          )}
+
+          {Array.isArray(selectedCareerPath?.official_resources) &&
+            selectedCareerPath.official_resources.length > 0 && (
+              <div className="roadmap-official-resources">
+                <strong>Official sources to verify requirements</strong>
+                <div>
+                  {selectedCareerPath.official_resources.map((resource) => (
+                    <a key={resource.url} href={resource.url} target="_blank" rel="noreferrer">
+                      {resource.label} <ChevronRight size={14} />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+          {roadmapData?.transition_reason && (
+            <div className="summary-reason-box">
+              <strong>Pathway assessment:</strong>
+              <p>{roadmapData.transition_reason}</p>
+            </div>
+          )}
+        </section>
+
+        {/* Career entry route */}
+        {isBlockedPath ? (
+          <section className="blocked-path-panel">
+            <div className="blocked-path-heading">
+              <AlertTriangle size={23} />
+              <div>
+                <h2>This path is not currently recommended</h2>
+                <p>
+                  E.A.R.N. found a possible hard eligibility barrier from the
+                  supplied profile. Check the official source above before
+                  making a final decision; do not spend time on exam preparation
+                  until this barrier is clarified.
+                </p>
+              </div>
+            </div>
+            <h3>Explore these alternatives first</h3>
+            <div className="roadmap-alternative-list">
+              {directions
+                .filter((item) => item.name !== roadmapData?.direction && item.eligibility_status !== "not_possible")
+                .slice(0, 3)
+                .map((item) => (
+                  <button
+                    key={item.name}
+                    type="button"
+                    onClick={() => handleSelectDirection(item.name)}
+                  >
+                    <span>
+                      <strong>{item.name}</strong>
+                      <small>{item.eligibility_reason || item.pathway_summary}</small>
+                    </span>
+                    <ArrowRight size={16} />
+                  </button>
+                ))}
+            </div>
+          </section>
+        ) : (
         <section className="timeline-section">
           <div className="timeline-header">
             <div className="timeline-icon">
@@ -646,6 +977,10 @@ function StudentRoadmap() {
               <h2>Your path forward</h2>
               <span>
                 Open a task to review its available practical actions.
+              <h2>Career Entry Roadmap</h2>
+              <span>
+                Qualifications, exams, admissions, applications and skill
+                development in the order needed for this route
               </span>
             </div>
           </div>
@@ -679,6 +1014,103 @@ function StudentRoadmap() {
                           <h3>{task.title}</h3>
                         </div>
                       </div>
+          <div className="timeline-steps">
+            {steps.map((step, idx) => {
+              const stepNumber = step.step || idx + 1;
+              const paddedNumber =
+                stepNumber < 10 ? `0${stepNumber}` : stepNumber;
+
+              return (
+                <div key={idx} className="timeline-item">
+                  <div className="timeline-marker">
+                    <div className="marker-number">{paddedNumber}</div>
+                    {idx < steps.length - 1 && <div className="marker-line" />}
+                  </div>
+
+                  <div className="timeline-card">
+                    <div className="timeline-card-header">
+                      <span className="step-tag">Step {paddedNumber}</span>
+                      <h3>{step.title}</h3>
+                    </div>
+
+                    <div className="route-step-meta">
+                      {step.route_type && (
+                        <span className={`route-step-type route-type-${step.route_type}`}>
+                          {String(step.route_type).replaceAll("_", " ")}
+                        </span>
+                      )}
+                      {step.estimated_duration && (
+                        <span className="route-step-duration">
+                          <CalendarClock size={13} /> {step.estimated_duration}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="step-description">{step.description}</p>
+
+                    {step.completion_evidence && (
+                      <div className="step-completion-evidence">
+                        <CheckCircle2 size={15} />
+                        <p><strong>Completion evidence:</strong> {step.completion_evidence}</p>
+                      </div>
+                    )}
+
+                    {step.official_resource_url && (
+                      <a
+                        className="step-official-link"
+                        href={step.official_resource_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {step.official_resource_label || "Open official source"}
+                        <ChevronRight size={14} />
+                      </a>
+                    )}
+
+                    {Array.isArray(step.skills) && step.skills.length > 0 && (
+                      <div className="step-skills-wrap">
+                        <span className="skills-label">Focus Skills:</span>
+                        <div className="skills-tags">
+                          {step.skills.map((skill, sIdx) => (
+                            <span key={sIdx} className="skill-tag">
+                              <Target size={12} />
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+        )}
+
+        {/* Footer Navigation */}
+        <section className="roadmap-footer-banner">
+          <div>
+            <span className="roadmap-eyebrow">CONTINUE YOUR JOURNEY</span>
+            <h2>Track Your Growth</h2>
+            <p>
+              Revisit your Interest Profile or Skill Gaps anytime as you
+              complete projects and learn new skills.
+            </p>
+          </div>
+
+          <div className="footer-actions">
+            <button
+              className="action-btn secondary"
+              onClick={() =>
+                navigate("/student/skills", {
+                  state: { direction: roadmapData?.direction },
+                })
+              }
+            >
+              <Puzzle size={16} />
+              View Skill Gaps
+            </button>
 
                       <p className="step-description">
                         {task.description || task.detail}

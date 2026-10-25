@@ -1,8 +1,15 @@
 from pathlib import Path
 import sys
+import os
+import tempfile
+from io import BytesIO
+from database import SessionLocal
+from models import Student, User
+from pwdlib import PasswordHash
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException, Depends
+
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from auth_dependencies import require_teacher
 
 # =========================================================
@@ -38,27 +45,33 @@ router = APIRouter(prefix="/api/teacher", tags=["Teacher"])
 # DATASET
 # =========================================================
 
-CSV_PATH = PROJECT_ROOT / "ai" / "data" / "students.csv"
+UPLOAD_DIR = PROJECT_ROOT / "uploads"
+UPLOADED_CSV_PATH = UPLOAD_DIR / "active_dataset.csv"
+
+password_hash = PasswordHash.recommended()
+
+# =========================================================
+# REQUIRED CSV COLUMNS
+# =========================================================
+
+REQUIRED_COLUMNS = {
+    "student_id",
+    "name",
+    "attendance",
+    "internal_marks",
+    "assignment_score",
+    "test_1",
+    "test_2",
+    "test_3",
+    "practical_marks",
+    "previous_sem_cgpa",
+    "hackathon_count",
+    "extracurricular_count",
+}
 
 
 # =========================================================
-# DETERMINISTIC ANALYSIS CACHE
-# =========================================================
-#
-# IMPORTANT:
-#
-# This cache contains ONLY:
-# - risk score
-# - risk level
-# - trend
-# - risk factors
-# - deterministic explanation
-#
-# AI results are NOT stored here.
-#
-# Therefore opening Analytics does NOT run AI.
-#
-# AI runs only when a teacher opens a particular student.
+# ANALYSIS CACHE
 # =========================================================
 
 analysis_cache = None
@@ -72,15 +85,6 @@ analysis_cache = None
 def extract_ai_section(ai_text, section_name, next_section=None):
     """
     Extract a section from the AI response.
-
-    Expected format:
-
-    AI Intervention:
-    First short line.
-    Second short line.
-
-    AI Suggestion:
-    One practical recommendation.
     """
 
     if not ai_text:
@@ -96,11 +100,9 @@ def extract_ai_section(ai_text, section_name, next_section=None):
     content = text.split(marker, 1)[1].strip()
 
     if next_section:
-
         next_marker = f"{next_section}:"
 
         if next_marker in content:
-
             content = content.split(next_marker, 1)[0].strip()
 
     return content
@@ -127,7 +129,6 @@ def extract_ai_intervention(ai_text):
 
     for line in lines:
 
-        # Remove markdown/list numbering
         line = line.lstrip("-•*123456789. ").strip()
 
         if line:
@@ -154,14 +155,359 @@ def extract_ai_suggestion(ai_text):
     return suggestion.strip()
 
 
+# =========================================================
+# EXTRACT AI ANALYSIS
+# =========================================================
+
+
 def extract_ai_analysis(ai_text):
     """
-    Extract the main Analysis section from the AI response.
+    Extract the main Analysis section.
     """
 
     analysis = extract_ai_section(ai_text, "Analysis", "AI Intervention")
 
     return analysis.strip() if analysis else ""
+
+
+# =========================================================
+# CSV VALIDATION
+# =========================================================
+
+
+def validate_uploaded_csv(df):
+    """
+    Validate the uploaded student CSV before replacing
+    the existing active dataset.
+    """
+
+    # Remove accidental spaces around column names
+    df.columns = [str(column).strip() for column in df.columns]
+
+    # -----------------------------------------------------
+    # REQUIRED COLUMNS
+    # -----------------------------------------------------
+
+    missing_columns = REQUIRED_COLUMNS - set(df.columns)
+
+    if missing_columns:
+
+        missing = ", ".join(sorted(missing_columns))
+
+        raise HTTPException(
+            status_code=400,
+            detail=("Invalid student CSV. " f"Missing required columns: {missing}"),
+        )
+
+    # -----------------------------------------------------
+    # EMPTY CSV
+    # -----------------------------------------------------
+
+    if df.empty:
+
+        raise HTTPException(status_code=400, detail="The uploaded CSV is empty.")
+
+    # -----------------------------------------------------
+    # STUDENT ID
+    # -----------------------------------------------------
+
+    if df["student_id"].isnull().any():
+
+        raise HTTPException(
+            status_code=400, detail="Some students are missing student_id."
+        )
+
+    # -----------------------------------------------------
+    # NAME
+    # -----------------------------------------------------
+
+    if df["name"].isnull().any():
+
+        raise HTTPException(status_code=400, detail="Some students are missing name.")
+
+    df["student_id"] = df["student_id"].astype(str).str.strip().str.upper()
+
+    # -----------------------------------------------------
+    # DUPLICATE STUDENT IDs
+    # -----------------------------------------------------
+
+    if df["student_id"].duplicated().any():
+
+        raise HTTPException(
+            status_code=400, detail="Duplicate student_id values found in CSV."
+        )
+
+    # -----------------------------------------------------
+    # NUMERIC COLUMNS
+    # -----------------------------------------------------
+
+    numeric_columns = [
+        "attendance",
+        "internal_marks",
+        "assignment_score",
+        "test_1",
+        "test_2",
+        "test_3",
+        "practical_marks",
+        "previous_sem_cgpa",
+        "hackathon_count",
+        "extracurricular_count",
+    ]
+
+    for column in numeric_columns:
+
+        converted = pd.to_numeric(df[column], errors="coerce")
+
+        if converted.isnull().any():
+
+            raise HTTPException(
+                status_code=400,
+                detail=(f"Column '{column}' " "contains invalid numeric values."),
+            )
+
+        # Store the converted numeric values
+        df[column] = converted
+
+    return df
+
+
+# =========================================================
+# UPLOAD STUDENT CSV
+# =========================================================
+
+
+@router.post("/upload-csv")
+async def upload_student_csv(
+    file: UploadFile = File(...), current_user: dict = Depends(require_teacher)
+):
+    """
+    Upload the student CSV used by Teacher Analytics.
+
+    Teacher can upload any CSV filename.
+
+    The backend:
+        1. Reads the uploaded CSV
+        2. Validates required columns
+        3. Saves it internally as active_dataset.csv
+        4. Clears old risk-analysis cache
+        5. Uses this dataset for Teacher Analytics
+    """
+
+    global analysis_cache
+
+    # -----------------------------------------------------
+    # CHECK FILE
+    # -----------------------------------------------------
+
+    if not file.filename:
+
+        raise HTTPException(status_code=400, detail="No file selected.")
+
+    filename = file.filename.lower()
+
+    if not filename.endswith(".csv"):
+
+        raise HTTPException(status_code=400, detail="Only CSV files are allowed.")
+
+    # -----------------------------------------------------
+    # READ UPLOADED FILE
+    # -----------------------------------------------------
+
+    try:
+
+        file_contents = await file.read()
+
+        if not file_contents:
+
+            raise HTTPException(status_code=400, detail="The uploaded CSV is empty.")
+
+        df = pd.read_csv(BytesIO(file_contents))
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=400, detail=("Could not read the CSV file: " f"{str(e)}")
+        )
+
+    # -----------------------------------------------------
+    # VALIDATE CSV
+    # -----------------------------------------------------
+
+    df = validate_uploaded_csv(df)
+
+    # -----------------------------------------------------
+    # MAKE SURE DATASET DIRECTORY EXISTS
+    # -----------------------------------------------------
+
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+    # -----------------------------------------------------
+    # WRITE TEMPORARY FILE FIRST
+    # -----------------------------------------------------
+
+    temp_path = None
+
+    try:
+
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".csv",
+            delete=False,
+            dir=UPLOAD_DIR,
+            encoding="utf-8",
+            newline="",
+        ) as temp_file:
+
+            temp_path = Path(temp_file.name)
+
+            df.to_csv(temp_file, index=False)
+
+        # -------------------------------------------------
+        # REPLACE ACTIVE DATASET
+        # -------------------------------------------------
+
+        os.replace(temp_path, UPLOADED_CSV_PATH)
+        # =========================================================
+        # SYNC UPLOADED STUDENTS INTO DATABASE
+        # =========================================================
+
+        db = SessionLocal()
+
+        try:
+
+            for _, row in df.iterrows():
+
+                student_id = str(row["student_id"]).strip()
+
+                existing_student = (
+                    db.query(Student).filter(Student.student_id == student_id).first()
+                )
+
+                if existing_student:
+
+                    # Update existing student
+                    existing_student.name = str(row["name"]).strip()
+
+                    existing_student.roll_number = str(row["student_id"]).strip()
+
+                    existing_student.attendance = int(row["attendance"])
+
+                    existing_student.previous_sem_cgpa = float(row["previous_sem_cgpa"])
+
+                    existing_student.extracurricular_count = int(
+                        row["extracurricular_count"]
+                    )
+
+                    existing_student.firebase_uid = student_id.upper()
+                else:
+
+                    # Create new student
+                    new_student = Student(
+                        student_id=student_id.upper(),
+                        firebase_uid=student_id.upper(),
+                        name=str(row["name"]).strip(),
+                        roll_number=student_id[-3:],
+                        attendance=int(row["attendance"]),
+                        previous_sem_cgpa=float(row["previous_sem_cgpa"]),
+                        extracurricular_count=int(row["extracurricular_count"]),
+                        year=3,
+                        branch="AIDS",
+                        preferences="",
+                        interests=[],
+                    )
+
+                    db.add(new_student)
+            # =========================================================
+            # SYNC STUDENT LOGIN USERS
+            # =========================================================
+
+            for _, row in df.iterrows():
+
+                user_id = str(row["student_id"]).strip().upper()
+                full_name = str(row["name"]).strip()
+
+                existing_user = db.query(User).filter(User.user_id == user_id).first()
+
+                if existing_user:
+                    existing_user.full_name = full_name
+
+                else:
+                    db.add(
+                        User(
+                            user_id=user_id,
+                            full_name=full_name,
+                            password_hash=password_hash.hash(f"student{user_id[-3:]}"),
+                            role="student",
+                        )
+                    )
+            db.commit()
+
+            print(f"Database student sync completed: {len(df)} students", flush=True)
+
+        except Exception as e:
+
+            db.rollback()
+
+            print("Student database sync failed:", repr(e), flush=True)
+
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "CSV uploaded, but students could not "
+                    "be synchronized with the database."
+                ),
+            )
+
+        finally:
+
+            db.close()
+
+        print("================================")
+        print("UPLOADED CSV PATH:", UPLOADED_CSV_PATH)
+        print("UPLOADED FILE EXISTS:", UPLOADED_CSV_PATH.exists())
+        print("UPLOADED STUDENT COUNT:", len(df))
+        print("================================")
+
+        temp_path = None
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500, detail=("Failed to save the uploaded CSV: " f"{str(e)}")
+        )
+
+    finally:
+
+        if temp_path and temp_path.exists():
+
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass
+
+    # -----------------------------------------------------
+    # CLEAR OLD ANALYSIS CACHE
+    # -----------------------------------------------------
+
+    analysis_cache = None
+
+    print("Teacher CSV uploaded successfully:", file.filename)
+
+    print("Students loaded:", len(df))
+
+    # -----------------------------------------------------
+    # RESPONSE
+    # -----------------------------------------------------
+
+    return {
+        "status": "success",
+        "message": "Student CSV uploaded successfully.",
+        "filename": file.filename,
+        "student_count": len(df),
+    }
 
 
 # =========================================================
@@ -171,7 +517,7 @@ def extract_ai_analysis(ai_text):
 
 def load_analysis():
     """
-    Load the student dataset and calculate:
+    Load the currently uploaded teacher dataset and calculate:
 
     - Risk score
     - Risk level
@@ -180,8 +526,6 @@ def load_analysis():
     - Explanation
 
     NO AI CALLS happen here.
-
-    This is why the Analytics page can load quickly.
     """
 
     global analysis_cache
@@ -192,27 +536,37 @@ def load_analysis():
 
     if analysis_cache is not None:
 
-        print("Teacher analytics: " "using cached risk analysis.")
+        print("Teacher analytics: using cached risk analysis.")
 
         return analysis_cache
 
     # -----------------------------------------------------
-    # CHECK DATASET
+    # CHECK ACTIVE DATASET
     # -----------------------------------------------------
 
-    if not CSV_PATH.exists():
+    if not UPLOADED_CSV_PATH.exists():
 
         raise HTTPException(
-            status_code=404, detail=("Student dataset not found at: " f"{CSV_PATH}")
+            status_code=404,
+            detail=(
+                "No student CSV has been uploaded yet. "
+                f"Expected active dataset at: "
+                f"{UPLOADED_CSV_PATH}"
+            ),
         )
 
     # -----------------------------------------------------
-    # READ CSV
+    # READ ACTIVE CSV
     # -----------------------------------------------------
+
+    print("================================")
+    print("ANALYTICS CSV PATH:", UPLOADED_CSV_PATH)
+    print("ANALYTICS FILE EXISTS:", UPLOADED_CSV_PATH.exists())
+    print("================================")
 
     try:
 
-        df = pd.read_csv(CSV_PATH)
+        df = pd.read_csv(UPLOADED_CSV_PATH)
 
     except Exception as e:
 
@@ -221,14 +575,25 @@ def load_analysis():
         )
 
     # -----------------------------------------------------
-    # RUN RISK ENGINE
+    # VALIDATE ACTIVE DATASET
     # -----------------------------------------------------
-    #
-    # IMPORTANT:
-    # analyze_dataset() now performs ONLY
-    # deterministic risk analysis.
-    #
-    # It does NOT call OpenAI.
+
+    try:
+
+        df = validate_uploaded_csv(df)
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=("Active student dataset validation failed: " f"{str(e)}"),
+        )
+
+    # -----------------------------------------------------
+    # RUN DETERMINISTIC RISK ENGINE
     # -----------------------------------------------------
 
     try:
@@ -262,22 +627,17 @@ def load_analysis():
 
 
 def get_student_from_csv(student_id):
-    """
-    Get the original student record from students.csv.
 
-    This is required because the AI needs the complete
-    academic data when the teacher opens a student.
-    """
-
-    if not CSV_PATH.exists():
+    if not UPLOADED_CSV_PATH.exists():
 
         raise HTTPException(
-            status_code=404, detail=("Student dataset not found at: " f"{CSV_PATH}")
+            status_code=404,
+            detail=("Student dataset not found at: " f"{UPLOADED_CSV_PATH}"),
         )
 
     try:
 
-        df = pd.read_csv(CSV_PATH)
+        df = pd.read_csv(UPLOADED_CSV_PATH)
 
     except Exception as e:
 
@@ -291,7 +651,7 @@ def get_student_from_csv(student_id):
 
             return student
 
-    raise HTTPException(status_code=404, detail=(f"Student {student_id} not found."))
+    raise HTTPException(status_code=404, detail=f"Student {student_id} not found.")
 
 
 # =========================================================
@@ -322,15 +682,16 @@ def clear_analysis_cache(current_user: dict = Depends(require_teacher)):
 @router.get("/report")
 def get_student_report(current_user: dict = Depends(require_teacher)):
 
-    if not CSV_PATH.exists():
+    if not UPLOADED_CSV_PATH.exists():
 
         raise HTTPException(
-            status_code=404, detail=("Student dataset not found at: " f"{CSV_PATH}")
+            status_code=404,
+            detail=("Student dataset not found at: " f"{UPLOADED_CSV_PATH}"),
         )
 
     try:
 
-        df = pd.read_csv(CSV_PATH)
+        df = pd.read_csv(UPLOADED_CSV_PATH)
 
         students = df.to_dict(orient="records")
 
@@ -372,19 +733,12 @@ def get_teacher_analytics(current_user: dict = Depends(require_teacher)):
 
         risk_summary[risk_level] += 1
 
-        # -------------------------------------------------
-        # IMPORTANT:
-        # NO AI ANALYSIS HERE
-        # -------------------------------------------------
-
         student_info = {
             "student_id": result.get("student_id"),
             "student_name": result.get("name"),
             "risk_level": risk_level,
             "risk_score": result.get("risk_score"),
             "performance_trend": result.get("trend", "STABLE"),
-            # AI will be generated later
-            # when teacher opens student.
             "intervention": {
                 "reasons": result.get("risk_factors", []),
                 "recommendation": "",
@@ -393,10 +747,6 @@ def get_teacher_analytics(current_user: dict = Depends(require_teacher)):
         }
 
         students[risk_level].append(student_info)
-
-    # -----------------------------------------------------
-    # RETURN ANALYTICS
-    # -----------------------------------------------------
 
     return {
         "status": "success",
@@ -476,7 +826,7 @@ def get_students_by_risk(risk: str, current_user: dict = Depends(require_teacher
     if risk not in {"HIGH", "MEDIUM", "LOW"}:
 
         raise HTTPException(
-            status_code=400, detail=("Risk must be HIGH, MEDIUM or LOW.")
+            status_code=400, detail=("Risk must be HIGH, " "MEDIUM or LOW.")
         )
 
     results = load_analysis()
@@ -501,32 +851,20 @@ def get_students_by_risk(risk: str, current_user: dict = Depends(require_teacher
 # =========================================================
 # GET /api/teacher/students/{student_id}
 # =========================================================
-#
-# THIS IS WHERE AI RUNS.
-#
-# The teacher has clicked a specific student.
-#
-# Example:
-#
-# /api/teacher/students/ST005
-#
-# Only ST005 gets an AI request.
-#
-# =========================================================
 
 
 @router.get("/students/{student_id}")
 def get_student_details(student_id: str, current_user: dict = Depends(require_teacher)):
 
     # -----------------------------------------------------
-    # STEP 1:
-    # Get deterministic risk results
+    # STEP 1
+    # Deterministic risk results
     # -----------------------------------------------------
 
     results = load_analysis()
 
     # -----------------------------------------------------
-    # STEP 2:
+    # STEP 2
     # Find selected student
     # -----------------------------------------------------
 
@@ -542,23 +880,19 @@ def get_student_details(student_id: str, current_user: dict = Depends(require_te
     if selected_result is None:
 
         raise HTTPException(
-            status_code=404, detail=(f"Student {student_id} not found.")
+            status_code=404, detail=(f"Student {student_id} " "not found.")
         )
 
     # -----------------------------------------------------
-    # STEP 3:
-    # Get complete original student data
+    # STEP 3
+    # Get complete student data
     # -----------------------------------------------------
 
     student = get_student_from_csv(student_id)
 
     # -----------------------------------------------------
-    # STEP 4:
-    # RUN AI ONLY NOW
-    # -----------------------------------------------------
-    #
-    # This happens only because the teacher clicked
-    # this particular student.
+    # STEP 4
+    # RUN AI ONLY FOR SELECTED STUDENT
     # -----------------------------------------------------
 
     print(f"AI analysis requested for student " f"{student_id}...")
@@ -574,15 +908,15 @@ def get_student_details(student_id: str, current_user: dict = Depends(require_te
         ai_text = "AI analysis unavailable.\n" f"AI error: {str(e)}"
 
     # -----------------------------------------------------
-    # STEP 5:
-    # Extract AI Intervention
+    # STEP 5
+    # AI INTERVENTION
     # -----------------------------------------------------
 
     ai_intervention = extract_ai_intervention(ai_text)
 
     # -----------------------------------------------------
-    # STEP 6:
-    # Extract AI Suggestion
+    # STEP 6
+    # AI SUGGESTION
     # -----------------------------------------------------
 
     ai_suggestion = extract_ai_suggestion(ai_text)
@@ -590,14 +924,8 @@ def get_student_details(student_id: str, current_user: dict = Depends(require_te
     ai_analysis = extract_ai_analysis(ai_text)
 
     # -----------------------------------------------------
-    # STEP 7:
-    # SAFETY FALLBACK
-    # -----------------------------------------------------
-    #
-    # If the AI gives malformed output, the frontend
-    # should still receive something useful.
-    #
-    # This fallback does NOT change the risk level.
+    # STEP 7
+    # FALLBACK
     # -----------------------------------------------------
 
     if len(ai_intervention) == 0:
@@ -606,18 +934,12 @@ def get_student_details(student_id: str, current_user: dict = Depends(require_te
 
         ai_intervention = [str(factor) for factor in risk_factors[:2]]
 
-    # LOW-risk students may have very few/no risk factors.
-    # They still need an intervention.
-
     if len(ai_intervention) == 0:
 
         ai_intervention = [
             "Continue monitoring the student's academic performance.",
             "Review future attendance and assessment trends.",
         ]
-
-    # Make sure there are exactly two lines
-    # for the frontend.
 
     while len(ai_intervention) < 2:
 
@@ -638,7 +960,7 @@ def get_student_details(student_id: str, current_user: dict = Depends(require_te
         )
 
     # -----------------------------------------------------
-    # FINAL STUDENT RESPONSE
+    # FINAL RESPONSE
     # -----------------------------------------------------
 
     return {
@@ -646,19 +968,10 @@ def get_student_details(student_id: str, current_user: dict = Depends(require_te
         "student_name": selected_result.get("name"),
         "risk_level": selected_result.get("risk_level"),
         "performance_trend": selected_result.get("trend", "STABLE"),
-        # ---------------------------------------------
-        # AI INTERVENTION
-        # Exactly two short lines
-        # ---------------------------------------------
         "analysis": ai_analysis,
         "intervention": {
             "reasons": ai_intervention,
-            # Recommendation does NOT belong here.
             "recommendation": "",
         },
-        # ---------------------------------------------
-        # AI SUGGESTION
-        # Shown separately in the frontend
-        # ---------------------------------------------
         "ai_analysis": ai_suggestion,
     }

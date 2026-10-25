@@ -4,19 +4,26 @@ import {
   getStudentProfile,
   getStudentInterestAnalysis,
 } from "../../services/studentService";
+import {
+  getStudentNotifications,
+  getAllStudentNotices,
+  markNotificationRead,
+} from "../../api/notifications";
 
 import {
   LayoutDashboard,
-  User,
   Sparkles,
   Puzzle,
   Compass,
+  Map,
   LogOut,
   GraduationCap,
   CalendarCheck,
   Award,
   ChevronRight,
   CheckCircle2,
+  SlidersHorizontal,
+  ExternalLink,
 } from "lucide-react";
 
 import "./StudentDashboard.css";
@@ -26,6 +33,10 @@ function StudentDashboard() {
   const [activePage, setActivePage] = useState("dashboard");
   const [studentData, setStudentData] = useState(null);
   const [interestAnalysis, setInterestAnalysis] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(true);
+  const [allNotices, setAllNotices] = useState([]);
+  const [noticeTab, setNoticeTab] = useState("relevant");
 
   const savedUser = (() => {
     try {
@@ -63,7 +74,37 @@ function StudentDashboard() {
           setInterestAnalysis(null);
         }
       });
+    getStudentNotifications(studentId)
+      .then((data) => {
+        if (isMounted) {
+          setNotifications(data.notifications || []);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to load notifications:", error);
+        if (isMounted) {
+          setNotifications([]);
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setNotificationsLoading(false);
+        }
+      });
 
+    getAllStudentNotices(studentId)
+      .then((data) => {
+        if (isMounted) {
+          setAllNotices(data.notices || []);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to load all notices:", error);
+
+        if (isMounted) {
+          setAllNotices([]);
+        }
+      });
     return () => {
       isMounted = false;
     };
@@ -73,8 +114,10 @@ function StudentDashboard() {
     name: studentData?.name || savedUser.full_name || "Aarav Sharma",
     studentId: studentData?.student_id || studentId,
     rollNumber: studentData?.roll_number || "01",
-    branch: "AIDS",
-    year: "3rd Year",
+    branch: studentData?.branch || "AIDS",
+    year: studentData?.year
+      ? `${studentData.year}${studentData.year === 1 ? "st" : studentData.year === 2 ? "nd" : studentData.year === 3 ? "rd" : "th"} Year`
+      : "3rd Year",
     attendance: studentData?.attendance ?? 92,
     previousCgpa: studentData?.previous_sem_cgpa ?? 8.4,
     extracurricular: studentData?.extracurricular_count ?? 3,
@@ -87,25 +130,20 @@ function StudentDashboard() {
       icon: LayoutDashboard,
     },
     {
-      id: "profile",
-      label: "My Profile",
-      icon: User,
-    },
-    {
       id: "interest",
       label: "Interest+",
       icon: Sparkles,
       highlight: true,
     },
     {
-      id: "skills",
-      label: "Skill Gaps",
-      icon: Puzzle,
+      id: "preferences",
+      label: "Preferences",
+      icon: SlidersHorizontal,
     },
     {
-      id: "roadmap",
-      label: "AI Roadmap",
-      icon: Compass,
+      id: "skills",
+      label: "Career Paths",
+      icon: Map,
     },
   ];
 
@@ -140,13 +178,13 @@ function StudentDashboard() {
                     return;
                   }
 
-                  if (item.id === "skills") {
-                    navigate("/student/skills");
+                  if (item.id === "preferences") {
+                    navigate("/student/preferences");
                     return;
                   }
 
-                  if (item.id === "roadmap") {
-                    navigate("/student/roadmap");
+                  if (item.id === "skills") {
+                    navigate("/student/career-paths");
                     return;
                   }
 
@@ -212,14 +250,6 @@ function StudentDashboard() {
               · {student.year}
             </p>
           </div>
-
-          <button
-            className="identity-profile-button"
-            onClick={() => setActivePage("profile")}
-          >
-            View Profile
-            <ChevronRight size={16} />
-          </button>
         </section>
 
         {/* Academic Snapshot */}
@@ -266,7 +296,261 @@ function StudentDashboard() {
             </div>
           </div>
         </section>
+        {/* =====================================================
+    STUDENT NOTICES
+===================================================== */}
 
+        <section className="dashboard-section">
+          <div className="section-heading">
+            <div>
+              <span className="section-label">NOTICE CENTER</span>
+              <h2>
+                {noticeTab === "relevant" ? "Relevant Notices" : "All Notices"}
+              </h2>
+            </div>
+
+            <span>
+              {noticeTab === "relevant"
+                ? `${
+                    notifications.filter(
+                      (notification) => notification.status === "UNREAD",
+                    ).length
+                  } unread`
+                : `${allNotices.length} notices`}
+            </span>
+          </div>
+
+          {/* Notice Tabs */}
+          <div className="notice-tabs">
+            <button
+              className={`notice-tab ${
+                noticeTab === "relevant" ? "active" : ""
+              }`}
+              onClick={() => setNoticeTab("relevant")}
+            >
+              Relevant Notices
+            </button>
+
+            <button
+              className={`notice-tab ${noticeTab === "all" ? "active" : ""}`}
+              onClick={() => setNoticeTab("all")}
+            >
+              All Notices
+            </button>
+          </div>
+
+          {notificationsLoading ? (
+            <div className="feature-card">
+              <p>Loading notices...</p>
+            </div>
+          ) : noticeTab === "relevant" ? (
+            /* =====================================================
+       RELEVANT NOTICES
+    ===================================================== */
+
+            notifications.length === 0 ? (
+              <div className="feature-card">
+                <div className="feature-card-top">
+                  <div className="feature-icon">
+                    <CheckCircle2 size={21} />
+                  </div>
+                </div>
+
+                <h3>No relevant notices</h3>
+
+                <p>
+                  There are currently no college notices matching your
+                  preferences.
+                </p>
+              </div>
+            ) : (
+              <div className="dashboard-grid">
+                {notifications.map((notification) => (
+                  <div
+                    className="feature-card"
+                    key={notification.notification_id}
+                  >
+                    <div className="feature-card-top">
+                      <div className="feature-icon">
+                        <CheckCircle2 size={21} />
+                      </div>
+
+                      <span className="coming-soon">
+                        {notification.priority}
+                      </span>
+                    </div>
+
+                    <h3>{notification.title}</h3>
+
+                    <p>
+                      {notification.summary ||
+                        "No summary available for this notice."}
+                    </p>
+
+                    {notification.deadline && (
+                      <p>
+                        <strong>Deadline:</strong> {notification.deadline}
+                      </p>
+                    )}
+
+                    {notification.reason && (
+                      <p>
+                        <strong>Why you're seeing this:</strong>{" "}
+                        {notification.reason}
+                      </p>
+                    )}
+
+                    <div className="notice-actions">
+                      {notification.status === "UNREAD" && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await markNotificationRead(
+                                studentId,
+                                notification.notification_id,
+                              );
+
+                              setNotifications((current) =>
+                                current.map((item) =>
+                                  item.notification_id ===
+                                  notification.notification_id
+                                    ? {
+                                        ...item,
+                                        status: "READ",
+                                      }
+                                    : item,
+                                ),
+                              );
+                            } catch (error) {
+                              console.error(
+                                "Failed to mark notification as read:",
+                                error,
+                              );
+                            }
+                          }}
+                        >
+                          Mark as Read
+                        </button>
+                      )}
+
+                      {notification.document_url && (
+                        <button
+                          onClick={() =>
+                            window.open(
+                              notification.document_url,
+                              "_blank",
+                              "noopener,noreferrer",
+                            )
+                          }
+                        >
+                          View Document
+                          <ExternalLink size={16} />
+                        </button>
+                      )}
+
+                      {notification.registration_link && (
+                        <button
+                          onClick={() =>
+                            window.open(
+                              notification.registration_link,
+                              "_blank",
+                              "noopener,noreferrer",
+                            )
+                          }
+                        >
+                          Open Registration
+                          <ChevronRight size={16} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : /* =====================================================
+       ALL NOTICES
+    ===================================================== */
+
+          allNotices.length === 0 ? (
+            <div className="feature-card">
+              <div className="feature-card-top">
+                <div className="feature-icon">
+                  <CheckCircle2 size={21} />
+                </div>
+              </div>
+
+              <h3>No notices available</h3>
+
+              <p>There are currently no notices published by the college.</p>
+            </div>
+          ) : (
+            <div className="dashboard-grid">
+              {allNotices.map((notice) => (
+                <div className="feature-card" key={notice.notice_id}>
+                  <div className="feature-card-top">
+                    <div className="feature-icon">
+                      <CheckCircle2 size={21} />
+                    </div>
+
+                    {notice.is_mandatory && (
+                      <span className="coming-soon">MANDATORY</span>
+                    )}
+                  </div>
+
+                  <h3>{notice.title}</h3>
+
+                  <p>
+                    {notice.summary || "No summary available for this notice."}
+                  </p>
+
+                  {notice.category && (
+                    <p>
+                      <strong>Category:</strong> {notice.category}
+                    </p>
+                  )}
+
+                  {notice.deadline && (
+                    <p>
+                      <strong>Deadline:</strong> {notice.deadline}
+                    </p>
+                  )}
+
+                  <div className="notice-actions">
+                    {notice.document_url && (
+                      <button
+                        onClick={() =>
+                          window.open(
+                            notice.document_url,
+                            "_blank",
+                            "noopener,noreferrer",
+                          )
+                        }
+                      >
+                        View Document
+                        <ExternalLink size={16} />
+                      </button>
+                    )}
+
+                    {notice.registration_link && (
+                      <button
+                        onClick={() =>
+                          window.open(
+                            notice.registration_link,
+                            "_blank",
+                            "noopener,noreferrer",
+                          )
+                        }
+                      >
+                        Open Registration
+                        <ChevronRight size={16} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
         {/* Interest+ */}
         <section className="interest-card">
           <div className="interest-card-content">

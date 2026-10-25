@@ -247,3 +247,16 @@
     padding: 28px 22px 24px;
   }
 }
+
+
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.demo-credential {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
