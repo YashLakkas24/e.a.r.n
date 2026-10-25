@@ -482,13 +482,13 @@ def generate_direction_discovery(
     rejected_titles_note = ""
     if rejected_directions:
         rejected_titles_note = (
-            "\\nREJECTED TITLES — DO NOT REPEAT\\n"
+            "\nREJECTED TITLES — DO NOT REPEAT\n"
             + json.dumps(rejected_directions, ensure_ascii=False)
-            + "\\nThese titles were rejected because they were activities, generic "
+            + "\nThese titles were rejected because they were activities, generic "
             "interests, or not recognizable occupational roles. Replace them "
             "with concrete job titles / occupational families. Exam names, "
             "degrees, projects and preparation activities are entry-route steps, "
-            "not career titles. Return five distinct role titles.\\n"
+            "not career titles. Return five distinct role titles.\n"
         )
 
     user_prompt = f"""
