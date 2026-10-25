@@ -106,7 +106,7 @@ def get_official_resources_for_direction(
             "Official SSC recruitment notices, exam calendars, and candidate updates. Post-specific criteria vary.",
         )
 
-    if any(term in name for term in ("state public service", "state civil service", "mpsc", "state psc")):
+    if any(term in name for term in ("state public service", "state civil service", "state services", "mpsc", "state psc")):
         if "maharashtra" in state or "maharashtra" in name or "mpsc" in name:
             add(
                 "Maharashtra Public Service Commission — Official Notices",
