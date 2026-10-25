@@ -437,7 +437,7 @@
   }
 
   .career-explorer-main {
-    width: min(100% - 28px, 640px);
+    width: min(640px, calc(100% - 28px));
     padding-top: 28px;
     gap: 20px;
   }
