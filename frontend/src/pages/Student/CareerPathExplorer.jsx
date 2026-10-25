@@ -23,6 +23,7 @@ import {
 import {
   getStudentCareerDirections,
   getStudentCareerEligibilityProfile,
+  getStudentInterestAnalysis,
   saveStudentCareerEligibilityProfile,
 } from "../../services/studentService";
 import "./CareerPathExplorer.css";
@@ -211,6 +212,18 @@ function CareerPathExplorer() {
       setLoading(true);
       setError("");
       try {
+        // Load the interest label independently so the eligibility form still
+        // tells the student which Interest+ result is being used.
+        try {
+          const interestResult = await getStudentInterestAnalysis(studentId);
+          if (cancelled) return;
+          if (interestResult.has_analysis && interestResult.analyses?.length) {
+            setInterest(interestResult.analyses[0].interest || "");
+          }
+        } catch {
+          // Interest label is supplementary; eligibility/profile loading can continue.
+        }
+
         const profileResult = await getStudentCareerEligibilityProfile(studentId);
         if (cancelled) return;
 
