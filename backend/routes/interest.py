@@ -847,6 +847,20 @@ def _run_roadmap_background(
             student_id, db
         )
         eligibility_profile = analysis_dict.get("career_eligibility_profile") or {}
+        saved_paths = analysis_dict.get("potential_directions") or []
+        selected_path = next(
+            (
+                item for item in saved_paths
+                if isinstance(item, dict) and item.get("name") == target_direction
+            ),
+            {},
+        )
+
+        if selected_path.get("eligibility_status") == "not_possible":
+            raise RuntimeError(
+                "Roadmap generation was blocked because this path has a verified "
+                "eligibility barrier. Explore another pathway or re-check the official rule."
+            )
 
         skill_analysis = CareerSkillGapAnalysis.model_validate(
             {
@@ -869,6 +883,7 @@ def _run_roadmap_background(
             existing_skills=existing_skills,
             previous_interests=previous_interests,
             student_profile=eligibility_profile,
+            career_path=selected_path,
         )
 
         cached.transition_difficulty = roadmap_result.transition_difficulty
