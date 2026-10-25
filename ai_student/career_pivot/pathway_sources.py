@@ -219,7 +219,7 @@ _ACTIVITY_PREFIX = re.compile(
     r"^(pursue|participate|build|improve|learn|practice|practise|take part in|"
     r"engage in|create|start|begin|complete|volunteer|organize|organise|"
     r"prepare for|study|explore|work on|join|run|conduct|develop|strengthen|"
-    r"practice|practise|level up)\\b",
+    r"level up)\b",
     re.IGNORECASE,
 )
 
@@ -250,7 +250,8 @@ _ROLE_TERMS = (
     "teacher", "lecturer", "professor", "nurse", "doctor", "lawyer", "advocate",
     "accountant", "technician", "economist", "planner", "journalist", "editor",
     "worker", "professional", "recruitment", "group b", "group c", "civil services",
-    "state services", "public service officer", "social worker", "developer",
+    "civil service", "administrative service", "foreign service", "police service",
+    "forest service", "state services", "public service officer", "social worker",
     "scientific officer", "technical officer", "commissioned officer",
 )
 
@@ -258,11 +259,9 @@ _ROLE_TERMS = (
 def is_career_role_name(value: str) -> bool:
     """Reject activity/learning-plan titles before they become career options.
 
-    This intentionally uses a conservative title check. It is not an occupation
-    database: it catches obvious activity-like generations and requires a
-    recognizable role/occupational-family term. Borderline suggestions are
-    regenerated once; if they still fail, they are omitted rather than shown as
-    a career.
+    This is a conservative title sanity check, not a full occupation database.
+    It catches obvious activity-like output and requires a recognizable role
+    or occupational-family term. A failed title is retried once, then omitted.
     """
     name = re.sub(r"\s+", " ", str(value or "")).strip().lower()
     if not name or _ACTIVITY_PREFIX.search(name):
@@ -271,8 +270,6 @@ def is_career_role_name(value: str) -> bool:
         return False
     if any(phrase in name for phrase in _NON_ROLE_TITLE_PHRASES):
         return False
-    # A parenthetical route can contain an action-like phrase without changing
-    # a genuine role title, so only inspect the title prefix before "(".
     title = name.split("(", 1)[0].strip()
     return any(term in title for term in _ROLE_TERMS)
 
