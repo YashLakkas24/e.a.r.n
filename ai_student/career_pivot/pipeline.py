@@ -95,7 +95,7 @@ def analyze_selected_skills(
     if not selected_direction:
         raise ValueError("Selected direction cannot be empty.")
 
-    print("\\n" + "=" * 60, flush=True)
+    print("\n" + "=" * 60, flush=True)
     print(f"SKILL GAP ANALYSIS: {selected_direction}", flush=True)
     print("=" * 60, flush=True)
 
