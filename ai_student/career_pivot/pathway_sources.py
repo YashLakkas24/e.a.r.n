@@ -258,7 +258,7 @@ def is_career_role_name(value: str) -> bool:
     regenerated once; if they still fail, they are omitted rather than shown as
     a career.
     """
-    name = re.sub(r"\\s+", " ", str(value or "")).strip().lower()
+    name = re.sub(r"\s+", " ", str(value or "")).strip().lower()
     if not name or _ACTIVITY_PREFIX.search(name):
         return False
     if any(phrase in name for phrase in _ACTIVITY_PHRASES):
