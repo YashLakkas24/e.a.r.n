@@ -1318,6 +1318,7 @@ def generate_transition_roadmap(
     skill_gaps: list | None = None,
     student_profile: dict | None = None,
     official_resources: list[dict] | None = None,
+    career_path: dict | None = None,
 ) -> TransitionRoadmapResult:
 
     existing_skills = existing_skills or []
@@ -1328,6 +1329,7 @@ def generate_transition_roadmap(
     skill_gaps = skill_gaps or []
     student_profile = student_profile or {}
     official_resources = official_resources or []
+    career_path = career_path or {}
 
     user_prompt = f"""
 TARGET DIRECTION
@@ -1345,6 +1347,16 @@ PREVIOUS INTERESTS
 CAREER ELIGIBILITY PROFILE
 --------------------------
 {json.dumps(student_profile, indent=2)}
+
+SELECTED CAREER PATH ASSESSMENT
+-------------------------------
+{json.dumps(career_path, indent=2)}
+
+Use this selected-path assessment as the primary career context. Preserve its
+eligibility status and the specific entry-route summary. Do not replace a
+verified "not_possible" decision with a generic skill-development roadmap.
+If eligibility is "needs_more_information", place verification of those exact
+facts before exam/application steps.
 
 OFFICIAL RESOURCE ALLOWLIST (URLs only from this list may be returned)
 ----------------------------------------------------------------------
