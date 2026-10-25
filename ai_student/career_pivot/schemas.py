@@ -65,6 +65,9 @@ class Direction(BaseModel):
     name: str
     fit_score: int = Field(ge=0, le=100)
     reason: str
+    # Increment when path discovery semantics change so cached activity-like
+    # recommendations are regenerated instead of silently reused.
+    pathway_version: Literal["career_role_routes_v3"] = "career_role_routes_v3"
     pathway_type: PathwayType = "other"
     pathway_summary: str = ""
     eligibility_status: EligibilityStatus = "needs_more_information"
