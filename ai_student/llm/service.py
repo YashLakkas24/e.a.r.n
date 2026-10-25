@@ -44,7 +44,11 @@ from ai_student.career_pivot.schemas import (
 # ============================================================
 
 DEFAULT_MODEL = os.getenv("AI_MODEL", "gpt-5-nano")
-SKILL_GAP_MODEL = os.getenv("SKILL_GAP_MODEL", DEFAULT_MODEL)
+CAREER_PIVOT_MODEL = (
+    os.getenv("CAREER_PIVOT_MODEL")
+    or os.getenv("SKILL_GAP_MODEL")  # Backward compatibility with existing deployments
+    or "gpt-4o-mini"
+)
 
 VALID_MODELS = [
     DEFAULT_MODEL,
@@ -500,6 +504,7 @@ Return ONLY valid JSON.
 """
 
     response = safe_chat_completion(
+        model=CAREER_PIVOT_MODEL,
         messages=[
             {
                 "role": "system",
@@ -607,6 +612,7 @@ Return ONLY valid JSON in this structure:
 """
 
     response = safe_chat_completion(
+        model=CAREER_PIVOT_MODEL,
         messages=[
             {
                 "role": "system",
@@ -798,6 +804,7 @@ Return ONLY valid JSON.
     )
 
     response = safe_chat_completion(
+        model=CAREER_PIVOT_MODEL,
         messages=[
             {
                 "role": "system",
@@ -982,6 +989,7 @@ Return ONLY valid JSON.
     )
 
     response = safe_chat_completion(
+        model=CAREER_PIVOT_MODEL,
         messages=[
             {
                 "role": "system",
@@ -1350,8 +1358,7 @@ Return ONLY valid JSON.
     )
 
     response = safe_chat_completion(
-        model=SKILL_GAP_MODEL,
-        reasoning_effort="none",
+        model=CAREER_PIVOT_MODEL,
         messages=[
             {
                 "role": "system",
