@@ -26,8 +26,10 @@ from ai_student.quiz.question_engine import validate_question
 from ai_student.interest_analysis.analyzer import analyze_interest
 from ai_student.career_pivot.pipeline import (
     discover_career_directions,
-    analyze_selected_direction,
+    analyze_selected_skills,
+    generate_roadmap_for_skill_analysis,
 )
+from ai_student.career_pivot.schemas import CareerSkillGapAnalysis
 from fastapi.responses import JSONResponse
 
 router = APIRouter(prefix="/api/students", tags=["Interest+"])
@@ -626,30 +628,51 @@ def _get_student_context(student_id: str, db: Session):
     return (latest_analysis, analysis_dict, existing_skills, previous_interests)
 
 
-def _career_analysis_status(cached):
+def _has_skill_gap_payload(cached) -> bool:
     if not cached:
-        return "missing"
-
-    if cached.transition_reason == "__PROCESSING__":
-        return "processing"
-
-    if isinstance(
-        cached.transition_reason, str
-    ) and cached.transition_reason.startswith("__ERROR__:"):
-        return "error"
-
-    required_fields = [
+        return False
+    core_fields = [
         cached.required_skills,
         cached.skill_assessments,
         cached.transferable_skills,
         cached.skill_gaps,
-        cached.transition_difficulty,
-        cached.transition_reason,
-        cached.roadmap,
     ]
+    return all(value not in (None, "") for value in core_fields)
 
-    if all(value not in (None, "") for value in required_fields):
+
+def _career_analysis_status(cached):
+    if not cached:
+        return "missing"
+
+    reason = cached.transition_reason
+    has_skill_gaps = _has_skill_gap_payload(cached)
+
+    if isinstance(reason, str) and reason.startswith("__ERROR__:"):
+        return "error"
+
+    if isinstance(reason, str) and reason.startswith("__ROADMAP_ERROR__:"):
+        return "roadmap_error"
+
+    if reason == "__PROCESSING__":
+        return "processing"
+
+    if reason == "__ROADMAP_PROCESSING__":
+        return "roadmap_processing"
+
+    all_roadmap_fields_present = all(
+        value not in (None, "")
+        for value in (
+            cached.transition_difficulty,
+            reason,
+            cached.roadmap,
+        )
+    )
+
+    if has_skill_gaps and all_roadmap_fields_present:
         return "completed"
+
+    if has_skill_gaps:
+        return "skill_gap_ready"
 
     return "incomplete"
 
@@ -658,20 +681,17 @@ def _career_error_message(cached):
     if not cached or not isinstance(cached.transition_reason, str):
         return "Career analysis failed."
 
-    return (
-        cached.transition_reason.replace(
-            "__ERROR__:",
-            "",
-            1,
-        ).strip()
-        or "Career analysis failed."
-    )
+    message = cached.transition_reason
+    for prefix in ("__ROADMAP_ERROR__:", "__ERROR__:"):
+        message = message.replace(prefix, "", 1)
+    return message.strip() or "Career analysis failed."
 
 
 def _run_career_pivot_background(
     student_id: str,
     target_direction: str,
 ):
+    """Generate and persist only the data required by the Skill Gaps page."""
     db = SessionLocal()
 
     try:
@@ -680,15 +700,15 @@ def _run_career_pivot_background(
         )
 
         if not latest_analysis:
-            return
+            raise RuntimeError("Interest analysis is no longer available.")
 
         print(
-            f"[CAREER PIVOT BACKGROUND] Starting | "
+            f"[CAREER PIVOT BACKGROUND] Skill-gap analysis started | "
             f"student={student_id} | direction={target_direction}",
             flush=True,
         )
 
-        analysis_result = analyze_selected_direction(
+        analysis_result = analyze_selected_skills(
             selected_direction=target_direction,
             existing_skills=existing_skills,
             previous_interests=previous_interests,
@@ -725,24 +745,27 @@ def _run_career_pivot_background(
         cached.skill_gaps = json.dumps(
             [g.model_dump() for g in analysis_result.skill_gaps]
         )
-        cached.transition_difficulty = analysis_result.transition_difficulty
-        cached.transition_reason = analysis_result.transition_reason
-        cached.roadmap = json.dumps([r.model_dump() for r in analysis_result.roadmap])
 
+        # Skill gaps are ready now. The roadmap is generated lazily when
+        # the student opens the roadmap page.
+        cached.transition_difficulty = None
+        cached.transition_reason = "__ROADMAP_PENDING__"
+        cached.roadmap = None
         db.commit()
 
         print(
-            f"[CAREER PIVOT BACKGROUND] Completed | "
-            f"student={student_id} | direction={target_direction}",
+            f"[CAREER PIVOT BACKGROUND] Skill-gap analysis ready | "
+            f"student={student_id} | direction={target_direction} | "
+            f"skills={len(analysis_result.skill_gaps)}",
             flush=True,
         )
 
     except Exception as e:
         print(
-            f"[CAREER PIVOT BACKGROUND] Failed | " f"{type(e).__name__}: {e}",
+            f"[CAREER PIVOT BACKGROUND] Skill-gap analysis failed | "
+            f"{type(e).__name__}: {e}",
             flush=True,
         )
-
         try:
             cached = (
                 db.query(CareerPivotAnalysis)
@@ -752,15 +775,103 @@ def _run_career_pivot_background(
                 )
                 .first()
             )
-
             if cached:
                 cached.transition_difficulty = None
                 cached.transition_reason = f"__ERROR__:{type(e).__name__}: {e}"
+                cached.roadmap = None
                 db.commit()
-
         except Exception:
             db.rollback()
+    finally:
+        db.close()
 
+
+def _run_roadmap_background(
+    student_id: str,
+    target_direction: str,
+):
+    """Generate the roadmap from persisted skill-gap data, without rerunning it."""
+    db = SessionLocal()
+
+    try:
+        cached = (
+            db.query(CareerPivotAnalysis)
+            .filter(
+                CareerPivotAnalysis.student_id == student_id,
+                CareerPivotAnalysis.direction == target_direction,
+            )
+            .first()
+        )
+        if not _has_skill_gap_payload(cached):
+            raise RuntimeError(
+                "Skill-gap analysis must finish before roadmap generation."
+            )
+
+        _, _, existing_skills, previous_interests = _get_student_context(
+            student_id, db
+        )
+
+        skill_analysis = CareerSkillGapAnalysis.model_validate(
+            {
+                "direction": cached.direction,
+                "required_skills": parse_json_safely(cached.required_skills) or [],
+                "skill_assessments": parse_json_safely(cached.skill_assessments) or [],
+                "transferable_skills": parse_json_safely(cached.transferable_skills) or [],
+                "skill_gaps": parse_json_safely(cached.skill_gaps) or [],
+            }
+        )
+
+        print(
+            f"[CAREER PIVOT BACKGROUND] Roadmap generation started | "
+            f"student={student_id} | direction={target_direction}",
+            flush=True,
+        )
+
+        roadmap_result = generate_roadmap_for_skill_analysis(
+            skill_analysis=skill_analysis,
+            existing_skills=existing_skills,
+            previous_interests=previous_interests,
+        )
+
+        cached.transition_difficulty = roadmap_result.transition_difficulty
+        cached.transition_reason = roadmap_result.transition_reason
+        cached.roadmap = json.dumps(
+            [step.model_dump() for step in roadmap_result.roadmap]
+        )
+        db.commit()
+
+        print(
+            f"[CAREER PIVOT BACKGROUND] Roadmap ready | "
+            f"student={student_id} | direction={target_direction}",
+            flush=True,
+        )
+
+    except Exception as e:
+        print(
+            f"[CAREER PIVOT BACKGROUND] Roadmap generation failed | "
+            f"{type(e).__name__}: {e}",
+            flush=True,
+        )
+        try:
+            cached = (
+                db.query(CareerPivotAnalysis)
+                .filter(
+                    CareerPivotAnalysis.student_id == student_id,
+                    CareerPivotAnalysis.direction == target_direction,
+                )
+                .first()
+            )
+            if cached:
+                # Preserve successful skill-gap results when only roadmap
+                # generation fails; a retry should not repeat core analysis.
+                cached.transition_difficulty = None
+                cached.transition_reason = (
+                    f"__ROADMAP_ERROR__:{type(e).__name__}: {e}"
+                )
+                cached.roadmap = None
+                db.commit()
+        except Exception:
+            db.rollback()
     finally:
         db.close()
 
@@ -856,18 +967,15 @@ def get_skill_gap(
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_student),
 ):
-
     verify_student_access(student_id, current_user)
 
     student = db.query(Student).filter(Student.student_id == student_id).first()
-
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
     latest_analysis, analysis_dict, existing_skills, previous_interests = (
         _get_student_context(student_id, db)
     )
-
     if not latest_analysis:
         return {
             "has_analysis": False,
@@ -879,40 +987,25 @@ def get_skill_gap(
             "data": None,
         }
 
-    # --------------------------------------------------------
-    # Determine direction
-    # --------------------------------------------------------
-
     target_direction = (direction or "").strip()
-
     if not target_direction:
-
-        pot_dirs = analysis_dict.get("potential_directions") or []
-
-        if pot_dirs and isinstance(pot_dirs, list) and len(pot_dirs) > 0:
-
+        potential_directions = analysis_dict.get("potential_directions") or []
+        if potential_directions and isinstance(potential_directions, list):
+            first = potential_directions[0]
             target_direction = (
-                pot_dirs[0]
-                if isinstance(pot_dirs[0], str)
-                else pot_dirs[0].get("name", "")
+                first if isinstance(first, str) else first.get("name", "")
             )
-
         else:
-
-            dir_res = discover_career_directions(
+            direction_result = discover_career_directions(
                 existing_skills=existing_skills,
                 previous_interests=previous_interests,
                 interest_analysis=analysis_dict,
             )
-
-            if dir_res.directions:
-                target_direction = dir_res.directions[0].name
-            else:
-                target_direction = latest_analysis.interest
-
-    # --------------------------------------------------------
-    # Check cached CareerPivotAnalysis in DB
-    # --------------------------------------------------------
+            target_direction = (
+                direction_result.directions[0].name
+                if direction_result.directions
+                else latest_analysis.interest
+            )
 
     cached = (
         db.query(CareerPivotAnalysis)
@@ -922,25 +1015,9 @@ def get_skill_gap(
         )
         .first()
     )
-
     status = _career_analysis_status(cached)
 
-    if status == "completed" and not force_refresh:
-        return {
-            "has_analysis": True,
-            "status": "completed",
-            "student_id": student_id,
-            "interest": cached.interest,
-            "direction": cached.direction,
-            "required_skills": parse_json_safely(cached.required_skills) or [],
-            "skill_assessments": parse_json_safely(cached.skill_assessments) or [],
-            "transferable_skills": parse_json_safely(cached.transferable_skills) or [],
-            "skill_gaps": parse_json_safely(cached.skill_gaps) or [],
-            "transition_difficulty": cached.transition_difficulty,
-            "transition_reason": cached.transition_reason,
-            "roadmap": parse_json_safely(cached.roadmap) or [],
-        }
-
+    # Never start a second core job while one is already running.
     if status == "processing":
         return JSONResponse(
             status_code=202,
@@ -950,9 +1027,57 @@ def get_skill_gap(
                 "student_id": student_id,
                 "interest": latest_analysis.interest,
                 "direction": target_direction,
-                "message": "Career analysis is being generated.",
+                "message": "Skill-gap analysis is being generated.",
             },
         )
+
+    if not force_refresh or status == "roadmap_processing":
+        if status in ("completed", "skill_gap_ready", "roadmap_processing", "roadmap_error"):
+            return {
+                "has_analysis": True,
+                "status": status,
+                "student_id": student_id,
+                "interest": cached.interest,
+                "direction": cached.direction,
+                "required_skills": parse_json_safely(cached.required_skills) or [],
+                "skill_assessments": parse_json_safely(cached.skill_assessments) or [],
+                "transferable_skills": parse_json_safely(cached.transferable_skills) or [],
+                "skill_gaps": parse_json_safely(cached.skill_gaps) or [],
+                "transition_difficulty": cached.transition_difficulty,
+                "transition_reason": (
+                    _career_error_message(cached)
+                    if status == "roadmap_error"
+                    else cached.transition_reason
+                    if status == "completed"
+                    else None
+                ),
+                "roadmap": parse_json_safely(cached.roadmap) or [],
+            }
+
+        if status == "error":
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "has_analysis": False,
+                    "status": "error",
+                    "student_id": student_id,
+                    "direction": target_direction,
+                    "detail": _career_error_message(cached),
+                },
+            )
+
+        if status == "processing":
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "has_analysis": False,
+                    "status": "processing",
+                    "student_id": student_id,
+                    "interest": latest_analysis.interest,
+                    "direction": target_direction,
+                    "message": "Skill-gap analysis is being generated.",
+                },
+            )
 
     if not cached:
         cached = CareerPivotAnalysis(
@@ -970,7 +1095,6 @@ def get_skill_gap(
     cached.transition_difficulty = None
     cached.transition_reason = "__PROCESSING__"
     cached.roadmap = None
-
     db.commit()
 
     background_tasks.add_task(
@@ -987,19 +1111,9 @@ def get_skill_gap(
             "student_id": student_id,
             "interest": latest_analysis.interest,
             "direction": target_direction,
-            "message": "Career analysis started.",
+            "message": "Skill-gap analysis started.",
         },
     )
-
-
-# ============================================================
-# GET ROADMAP
-# ============================================================
-
-
-# ============================================================
-# GET ROADMAP
-# ============================================================
 
 
 @router.get("/{student_id}/roadmap")
@@ -1030,19 +1144,15 @@ def get_roadmap(
         }
 
     target_direction = (direction or "").strip()
-
     if not target_direction:
         potential_directions = (
             parse_json_safely(latest_analysis.potential_directions) or []
         )
-
         if potential_directions:
             first = potential_directions[0]
-
             target_direction = (
                 first if isinstance(first, str) else first.get("name", "")
             )
-
         else:
             target_direction = latest_analysis.interest
 
@@ -1054,24 +1164,10 @@ def get_roadmap(
         )
         .first()
     )
-
     status = _career_analysis_status(cached)
 
-    # Completed and no refresh required
-    if status == "completed" and not force_refresh:
-        return {
-            "has_analysis": True,
-            "status": "completed",
-            "student_id": student_id,
-            "interest": cached.interest,
-            "direction": cached.direction,
-            "transition_difficulty": cached.transition_difficulty,
-            "transition_reason": cached.transition_reason,
-            "roadmap": parse_json_safely(cached.roadmap) or [],
-        }
-
-    # Already processing
-    if status == "processing" and not force_refresh:
+    # Poll an in-flight job rather than overwriting its state.
+    if status in ("processing", "roadmap_processing"):
         return JSONResponse(
             status_code=202,
             content={
@@ -1079,11 +1175,106 @@ def get_roadmap(
                 "status": "processing",
                 "student_id": student_id,
                 "direction": target_direction,
-                "message": "Roadmap analysis is being generated.",
+                "message": "Career analysis is being generated.",
             },
         )
 
-    # Create/cache record
+    # Refreshing an existing roadmap only needs the roadmap stage. Reuse the
+    # saved skill-gap analysis to avoid rerunning the earlier LLM stages.
+    if force_refresh and status in ("completed", "skill_gap_ready", "roadmap_error"):
+        cached.transition_difficulty = None
+        cached.transition_reason = "__ROADMAP_PROCESSING__"
+        cached.roadmap = None
+        db.commit()
+        background_tasks.add_task(
+            _run_roadmap_background,
+            student_id,
+            target_direction,
+        )
+        return JSONResponse(
+            status_code=202,
+            content={
+                "has_analysis": False,
+                "status": "processing",
+                "student_id": student_id,
+                "direction": target_direction,
+                "message": "Roadmap refresh started.",
+            },
+        )
+
+    if not force_refresh:
+        if status == "completed":
+            return {
+                "has_analysis": True,
+                "status": "completed",
+                "student_id": student_id,
+                "interest": cached.interest,
+                "direction": cached.direction,
+                "transition_difficulty": cached.transition_difficulty,
+                "transition_reason": cached.transition_reason,
+                "roadmap": parse_json_safely(cached.roadmap) or [],
+            }
+
+        if status in ("processing", "roadmap_processing"):
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "has_analysis": False,
+                    "status": "processing",
+                    "student_id": student_id,
+                    "direction": target_direction,
+                    "message": "Career analysis is being generated.",
+                },
+            )
+
+        if status == "error":
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "has_analysis": False,
+                    "status": "error",
+                    "student_id": student_id,
+                    "direction": target_direction,
+                    "detail": _career_error_message(cached),
+                },
+            )
+
+        if status == "roadmap_error":
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "has_analysis": False,
+                    "status": "error",
+                    "student_id": student_id,
+                    "direction": target_direction,
+                    "detail": _career_error_message(cached),
+                },
+            )
+
+        if status == "skill_gap_ready":
+            cached.transition_difficulty = None
+            cached.transition_reason = "__ROADMAP_PROCESSING__"
+            cached.roadmap = None
+            db.commit()
+
+            background_tasks.add_task(
+                _run_roadmap_background,
+                student_id,
+                target_direction,
+            )
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "has_analysis": False,
+                    "status": "processing",
+                    "student_id": student_id,
+                    "direction": target_direction,
+                    "message": "Personalized roadmap generation started.",
+                },
+            )
+
+    # No usable skill-gap result, an explicit full refresh was requested,
+    # or the prior core analysis was incomplete: rebuild core analysis first.
     if not cached:
         cached = CareerPivotAnalysis(
             student_id=student_id,
@@ -1100,7 +1291,6 @@ def get_roadmap(
     cached.transition_difficulty = None
     cached.transition_reason = "__PROCESSING__"
     cached.roadmap = None
-
     db.commit()
 
     background_tasks.add_task(
@@ -1116,14 +1306,9 @@ def get_roadmap(
             "status": "processing",
             "student_id": student_id,
             "direction": target_direction,
-            "message": "Roadmap analysis started.",
+            "message": "Skill-gap analysis started before roadmap generation.",
         },
     )
-
-
-# ============================================================
-# ANALYZE SPECIFIC CAREER DIRECTION
-# ============================================================
 
 
 @router.post("/{student_id}/career-pivot/analyze")

@@ -373,8 +373,17 @@ export async function getStudentSkillGap(
 
   if (!response.ok && response.status !== 202) {
     const errorText = await response.text();
+    let message = errorText;
+
+    try {
+      const payload = JSON.parse(errorText);
+      message = payload.detail || payload.message || errorText;
+    } catch {
+      // Preserve non-JSON response text for diagnostics.
+    }
+
     throw new Error(
-      `Failed to fetch skill gap analysis (${response.status}): ${errorText}`,
+      `Failed to fetch skill gap analysis (${response.status}): ${message}`,
     );
   }
 
@@ -408,8 +417,17 @@ export async function getStudentRoadmap(
 
   if (!response.ok && response.status !== 202) {
     const errorText = await response.text();
+    let message = errorText;
+
+    try {
+      const payload = JSON.parse(errorText);
+      message = payload.detail || payload.message || errorText;
+    } catch {
+      // Preserve non-JSON response text for diagnostics.
+    }
+
     throw new Error(
-      `Failed to fetch student roadmap (${response.status}): ${errorText}`,
+      `Failed to fetch student roadmap (${response.status}): ${message}`,
     );
   }
 

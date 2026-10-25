@@ -84,6 +84,21 @@ class SkillGapResult(BaseModel):
     skill_gaps: list[SkillGap]    
 
 
+
+class CareerSkillGapAnalysis(BaseModel):
+    """Core career analysis needed by the Skill Gaps page.
+
+    Roadmap generation is intentionally separate so these results can
+    be returned as soon as the skill assessment stages are complete.
+    """
+
+    direction: str
+    required_skills: list[SkillRequirement]
+    skill_assessments: list[SkillAssessment]
+    transferable_skills: list[TransferableSkill]
+    skill_gaps: list[SkillGap]
+
+
 class RoadmapStep(BaseModel):
     step: int
     title: str

@@ -63,7 +63,12 @@ function StudentRoadmap() {
   const studentId = getStudentId();
 
   const waitForRoadmap = async (direction) => {
-    for (let i = 0; i < 30; i++) {
+    // If the user opens the roadmap before core skill-gap analysis exists,
+    // the backend completes that first and then generates the roadmap.
+    const deadline = Date.now() + 6 * 60 * 1000;
+    let delayMs = 2000;
+
+    while (Date.now() < deadline) {
       const res = await getStudentRoadmap(studentId, direction);
 
       if (res.status === "completed" && res.has_analysis) {
@@ -78,10 +83,19 @@ function StudentRoadmap() {
         throw new Error(res.detail || "Roadmap analysis failed.");
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) break;
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(delayMs, remainingMs)),
+      );
+      delayMs = Math.min(Math.round(delayMs * 1.35), 5000);
     }
 
-    throw new Error("Roadmap analysis timed out.");
+    throw new Error(
+      "Roadmap generation is taking longer than expected. " +
+        "The job may still be running; try again shortly.",
+    );
   };
 
   useEffect(() => {
