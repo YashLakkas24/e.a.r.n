@@ -256,7 +256,7 @@ function StudentRoadmap() {
           </button>
           <div className="roadmap-brand">
             <Sparkles size={19} />
-            <span>AI Learning Roadmap</span>
+            <span>Career Entry Roadmap</span>
           </div>
         </header>
         <main className="roadmap-main">
@@ -347,10 +347,13 @@ function StudentRoadmap() {
           className="roadmap-refresh-btn"
           disabled={refreshing}
           onClick={handleRefresh}
-          title="Regenerate Roadmap with AI"
+          title={isBlockedPath
+            ? "This path is flagged as not possible under the supplied profile. Review the eligibility details and official source links."
+            : "Rebuild the career-entry roadmap from the selected role and saved eligibility profile"}
+          disabled={refreshing || isBlockedPath}
         >
           <RotateCcw size={14} className={refreshing ? "spin-icon" : ""} />
-          {refreshing ? "Synthesizing..." : "Regenerate Roadmap"}
+          {isBlockedPath ? "Eligibility blocked" : refreshing ? "Synthesizing..." : "Regenerate Path"}
         </button>
       </header>
 
