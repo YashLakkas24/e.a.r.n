@@ -345,7 +345,6 @@ function StudentRoadmap() {
 
         <button
           className="roadmap-refresh-btn"
-          disabled={refreshing}
           onClick={handleRefresh}
           title={isBlockedPath
             ? "This path is flagged as not possible under the supplied profile. Review the eligibility details and official source links."
@@ -361,10 +360,11 @@ function StudentRoadmap() {
         {/* Intro */}
         <section className="roadmap-intro">
           <span className="roadmap-eyebrow">STEP-BY-STEP TRANSITION PATH</span>
-          <h1>Personalized Learning Roadmap</h1>
+          <h1>Career Entry Roadmap</h1>
           <p>
-            Structured milestones designed to guide your transition into{" "}
-            <strong>{roadmapData?.direction || "your target role"}</strong>.
+            Follow the qualification, exam or admission steps, applications,
+            and targeted preparation needed to pursue{" "}
+            <strong>{roadmapData?.direction || "your selected role"}</strong>.
           </p>
         </section>
 
