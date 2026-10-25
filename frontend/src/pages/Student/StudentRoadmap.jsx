@@ -193,7 +193,7 @@ function StudentRoadmap() {
     return () => {
       isMounted = false;
     };
-  }, [studentId]);
+  }, [studentId, navigate]);
 
   const handleSelectDirection = async (dirName) => {
     if (dirName === selectedDirection && roadmapData) return;
