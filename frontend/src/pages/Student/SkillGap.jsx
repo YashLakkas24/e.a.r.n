@@ -28,7 +28,7 @@ const STATUS_CONFIG = {
     color: "#f87171",
   },
   small_gap: {
-    label: "Moderate Gap",
+    label: "Small Gap",
     badgeClass: "badge-gap-small",
     icon: AlertTriangle,
     color: "#fbbf24",
@@ -40,7 +40,7 @@ const STATUS_CONFIG = {
     color: "#34d399",
   },
   assessment_needed: {
-    label: "Assessment Needed",
+    label: "Needs Assessment",
     badgeClass: "badge-gap-needed",
     icon: HelpCircle,
     color: "#60a5fa",
@@ -59,6 +59,7 @@ function SkillGap() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [activeSection, setActiveSection] = useState("overview");
 
   const getStudentId = () => {
     try {
@@ -311,12 +312,50 @@ if (res.has_analysis) {
   const transferableSkills = gapData?.transferable_skills || [];
   const skillGaps = gapData?.skill_gaps || [];
 
-  const actualGapsCount = skillGaps.filter(
-    (g) => g.status === "actual_gap",
+  const skillsToImproveCount = skillGaps.filter(
+    (gap) => gap.status === "actual_gap" || gap.status === "small_gap",
+  ).length;
+  const skillsToVerifyCount = skillGaps.filter(
+    (gap) => gap.status === "assessment_needed",
   ).length;
   const metRequirementsCount = skillGaps.filter(
-    (g) => g.status === "no_gap",
+    (gap) => gap.status === "no_gap",
   ).length;
+
+  const normalizeSkillName = (value) =>
+    String(value || "").trim().toLowerCase();
+
+  const getRequirement = (skill) =>
+    requiredSkills.find(
+      (item) =>
+        normalizeSkillName(item.skill) === normalizeSkillName(skill),
+    );
+
+  const getAssessment = (skill) =>
+    skillAssessments.find(
+      (item) =>
+        normalizeSkillName(item.skill) === normalizeSkillName(skill),
+    );
+
+  const getImportance = (skill) => Number(getRequirement(skill)?.importance) || 0;
+
+  const prioritySkills = [...skillGaps].sort((a, b) => {
+    const rank = {
+      actual_gap: 0,
+      small_gap: 1,
+      assessment_needed: 2,
+      no_gap: 3,
+    };
+    return (
+      (rank[a.status] ?? 4) - (rank[b.status] ?? 4) ||
+      getImportance(b.skill) - getImportance(a.skill)
+    );
+  });
+
+  const startSkill = prioritySkills[0];
+  const startSkillRequirement = startSkill
+    ? getRequirement(startSkill.skill)
+    : null;
 
   return (
     <div className="skill-gap-page">
@@ -348,12 +387,12 @@ if (res.has_analysis) {
       <main className="skill-gap-main">
         {/* Intro */}
         <section className="skill-gap-intro">
-          <span className="skill-gap-eyebrow">AI CAPABILITY ASSESSMENT</span>
-          <h1>Industry Skill Gap Analysis</h1>
+          <span className="skill-gap-eyebrow">CAREER DEVELOPMENT</span>
+          <h1>Skill Gap Intelligence</h1>
           <p>
-            Comparing your assessed capabilities in{" "}
-            <strong>{gapData?.interest || "your chosen domain"}</strong> against
-            industry-required benchmarks.
+            Compare your current skills with AI-estimated requirements for
+            your selected direction. Unknown means more evidence is needed,
+            not that you lack the skill.
           </p>
         </section>
 
@@ -385,44 +424,58 @@ if (res.has_analysis) {
           </section>
         )}
 
-        {/* Active Target Direction Banner */}
+        {/* Selected Direction */}
         <section className="active-direction-card">
           <div className="direction-icon-wrap">
             <Layers size={24} />
           </div>
           <div className="direction-info-wrap">
-            <span>TARGET DIRECTION</span>
-            <h2>{gapData?.direction || "Career Path"}</h2>
+            <span>SELECTED DIRECTION</span>
+            <h2 title={gapData?.direction}>
+              {gapData?.direction || "Career Path"}
+            </h2>
             {gapData?.transition_difficulty && (
               <div className="transition-tag">
-                <span>Transition Difficulty: </span>
-                <strong className={`diff-${gapData.transition_difficulty}`}>
+                <span>Estimated transition difficulty: </span>
+                <strong className={"diff-" + gapData.transition_difficulty}>
                   {gapData.transition_difficulty.toUpperCase()}
                 </strong>
               </div>
             )}
           </div>
+          <button
+            className="action-btn primary roadmap-inline-btn"
+            onClick={() =>
+              navigate("/student/roadmap", {
+                state: { direction: gapData?.direction },
+              })
+            }
+          >
+            <Sparkles size={16} />
+            View Roadmap
+            <ArrowRight size={16} />
+          </button>
         </section>
 
-        {/* Summary Metrics */}
-        <section className="metrics-grid">
-          <div className="metric-card">
-            <div className="metric-icon">
-              <Layers size={20} />
-            </div>
-            <div>
-              <span>Required Skills</span>
-              <strong>{requiredSkills.length}</strong>
-            </div>
-          </div>
-
+        {/* Primary Summary */}
+        <section className="metrics-grid" aria-label="Skill summary">
           <div className="metric-card">
             <div className="metric-icon highlight-gap">
               <Flame size={20} />
             </div>
             <div>
-              <span>Priority Gaps</span>
-              <strong>{actualGapsCount}</strong>
+              <span>Below Target</span>
+              <strong>{skillsToImproveCount}</strong>
+            </div>
+          </div>
+
+          <div className="metric-card">
+            <div className="metric-icon">
+              <HelpCircle size={20} />
+            </div>
+            <div>
+              <span>Not Yet Assessed</span>
+              <strong>{skillsToVerifyCount}</strong>
             </div>
           </div>
 
@@ -431,7 +484,7 @@ if (res.has_analysis) {
               <CheckCircle2 size={20} />
             </div>
             <div>
-              <span>Requirements Met</span>
+              <span>Meets Target</span>
               <strong>{metRequirementsCount}</strong>
             </div>
           </div>
@@ -441,198 +494,315 @@ if (res.has_analysis) {
               <Award size={20} />
             </div>
             <div>
-              <span>Transferable Skills</span>
+              <span>Relevant Strengths</span>
               <strong>{transferableSkills.length}</strong>
             </div>
           </div>
         </section>
 
-        {/* Section 1: Identified Skill Gaps */}
-        <section className="analysis-block">
-          <div className="block-header">
-            <div className="block-icon">
-              <Puzzle size={20} />
-            </div>
-            <div>
-              <h2>Identified Skill Gaps</h2>
-              <span>
-                Comparison of your current skill level against target
-                requirement
-              </span>
-            </div>
-          </div>
+        {/* Section Navigation */}
+        <div className="skill-section-tabs" role="tablist" aria-label="Skill analysis sections">
+          <button
+            type="button"
+            id="tab-overview"
+            role="tab"
+            aria-selected={activeSection === "overview"}
+            aria-controls="panel-overview"
+            className={"skill-section-tab" + (activeSection === "overview" ? " active" : "")}
+            onClick={() => setActiveSection("overview")}
+          >
+            <Layers size={17} />
+            <span>Overview</span>
+          </button>
 
-          <div className="gaps-list">
-            {skillGaps.map((gap, idx) => {
-              const cfg = STATUS_CONFIG[gap.status] || STATUS_CONFIG.small_gap;
-              const Icon = cfg.icon;
+          <button
+            type="button"
+            id="tab-skills"
+            role="tab"
+            aria-selected={activeSection === "skills"}
+            aria-controls="panel-skills"
+            className={"skill-section-tab" + (activeSection === "skills" ? " active" : "")}
+            onClick={() => setActiveSection("skills")}
+          >
+            <Puzzle size={17} />
+            <span>Skill Gaps &amp; Requirements</span>
+            <span className="tab-count">{skillGaps.length}</span>
+          </button>
 
-              return (
-                <div key={idx} className="gap-card">
-                  <div className="gap-card-top">
-                    <div className="gap-title-group">
-                      <h3>{gap.skill}</h3>
-                      <span className={`status-badge ${cfg.badgeClass}`}>
-                        <Icon size={13} />
-                        {cfg.label}
-                      </span>
-                    </div>
+          <button
+            type="button"
+            id="tab-strengths"
+            role="tab"
+            aria-selected={activeSection === "strengths"}
+            aria-controls="panel-strengths"
+            className={"skill-section-tab" + (activeSection === "strengths" ? " active" : "")}
+            onClick={() => setActiveSection("strengths")}
+          >
+            <Award size={17} />
+            <span>Transferable Strengths</span>
+            <span className="tab-count">{transferableSkills.length}</span>
+          </button>
+        </div>
 
-                    <div className="level-comparison">
-                      <div className="level-pill current">
-                        <span>Current:</span>
-                        <strong>{gap.current_level}</strong>
-                      </div>
-                      <span className="level-arrow">→</span>
-                      <div className="level-pill required">
-                        <span>Required:</span>
-                        <strong>{gap.required_level}</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  <p className="gap-explanation">{gap.explanation}</p>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Section 2: Industry Required Skills */}
-        <section className="analysis-block">
-          <div className="block-header">
-            <div className="block-icon">
-              <TrendingUp size={20} />
-            </div>
-            <div>
-              <h2>Industry-Required Skills</h2>
-              <span>
-                Key competencies expected by industry for {gapData?.direction}
-              </span>
-            </div>
-          </div>
-
-          <div className="required-skills-grid">
-            {requiredSkills.map((req, idx) => (
-              <div key={idx} className="req-skill-card">
-                <div className="req-card-top">
-                  <h4>{req.skill}</h4>
-                  <span className="req-level-tag">{req.required_level}</span>
-                </div>
-
-                <div className="importance-bar-wrap">
-                  <div className="importance-labels">
-                    <span>Industry Importance</span>
-                    <strong>{req.importance}%</strong>
-                  </div>
-                  <div className="importance-track">
-                    <div
-                      className="importance-fill"
-                      style={{ width: `${req.importance}%` }}
-                    />
-                  </div>
-                </div>
-
-                <p className="req-reason">{req.reason}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Section 3: Two Column - Assessed Student Skills & Transferable Skills */}
-        <div className="two-column-grid">
-          {/* Current Assessed Capabilities */}
-          <section className="analysis-block">
-            <div className="block-header">
-              <div className="block-icon">
-                <CheckCircle2 size={20} />
-              </div>
+        {/* Overview Panel */}
+        {activeSection === "overview" && (
+          <section
+            className="section-panel"
+            id="panel-overview"
+            role="tabpanel"
+            aria-labelledby="tab-overview"
+          >
+            <div className="overview-section-heading">
               <div>
-                <h2>Your Assessed Skills</h2>
-                <span>Evidence-backed assessment from your profile</span>
+                <h2>Your current position</h2>
+                <p>A quick view of what to improve, verify, and build on.</p>
+              </div>
+              <button
+                type="button"
+                className="text-action"
+                onClick={() => setActiveSection("skills")}
+              >
+                Review all skills <ArrowRight size={15} />
+              </button>
+            </div>
+
+            {startSkill ? (
+              <section className="overview-start-card">
+                <div className="overview-start-icon">
+                  <TrendingUp size={21} />
+                </div>
+                <div className="overview-start-content">
+                  <span className="skill-gap-eyebrow">SUGGESTED STARTING POINT</span>
+                  <h3>{startSkill.skill}</h3>
+                  <p>
+                    {startSkill.status === "assessment_needed"
+                      ? "Your current level is not established yet. Gather evidence before deciding whether training is needed."
+                      : startSkill.status === "actual_gap"
+                        ? "This skill is below the target level and is a priority for development."
+                        : startSkill.status === "small_gap"
+                          ? "You have a foundation in this skill. Focus on closing the remaining gap to the target."
+                          : "This skill appears to meet the target. Review its supporting evidence if needed."}
+                  </p>
+                  <div className="overview-start-meta">
+                    <span className={"status-badge " + (STATUS_CONFIG[startSkill.status] || STATUS_CONFIG.assessment_needed).badgeClass}>
+                      {(STATUS_CONFIG[startSkill.status] || STATUS_CONFIG.assessment_needed).label}
+                    </span>
+                    {startSkillRequirement && (
+                      <span className="importance-inline">
+                        AI-estimated importance: <strong>{startSkillRequirement.importance}/100</strong>
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="action-btn secondary"
+                  onClick={() => setActiveSection("skills")}
+                >
+                  Explore skills <ArrowRight size={15} />
+                </button>
+              </section>
+            ) : (
+              <div className="empty-notice">
+                No skill analysis is available for this direction yet.
+              </div>
+            )}
+
+            <div className="overview-section-heading priorities-heading">
+              <div>
+                <h2>Priority skills</h2>
+                <p>Start with the highest-priority items in your assessment.</p>
               </div>
             </div>
 
-            <div className="assessment-list">
-              {skillAssessments.map((item, idx) => (
-                <div key={idx} className="assessment-item">
-                  <div className="assessment-top">
-                    <strong>{item.skill}</strong>
-                    <span className="current-level-tag">
-                      {item.current_level}
+            <div className="overview-priority-list">
+              {prioritySkills.slice(0, 3).map((skill, idx) => {
+                const config =
+                  STATUS_CONFIG[skill.status] || STATUS_CONFIG.assessment_needed;
+                const requirement = getRequirement(skill.skill);
+
+                return (
+                  <button
+                    type="button"
+                    key={skill.skill + "-" + idx}
+                    className="overview-priority-row"
+                    onClick={() => setActiveSection("skills")}
+                  >
+                    <span className="priority-rank">{idx + 1}</span>
+                    <span className="priority-skill-name">{skill.skill}</span>
+                    <span className={"status-badge " + config.badgeClass}>
+                      {config.label}
                     </span>
-                  </div>
-                  <p className="assessment-evidence">{item.evidence}</p>
-                  <div className="assessment-meta">
-                    <span>Basis: {item.assessment_basis}</span>
-                    <span>Confidence: {item.confidence}</span>
-                  </div>
-                </div>
-              ))}
+                    <span className="importance-inline">
+                      {requirement ? requirement.importance + "/100 importance" : "Importance unavailable"}
+                    </span>
+                    <ArrowRight size={15} />
+                  </button>
+                );
+              })}
+              {prioritySkills.length === 0 && (
+                <p className="empty-notice">No skills to display yet.</p>
+              )}
             </div>
           </section>
+        )}
 
-          {/* Transferable Skills */}
-          <section className="analysis-block">
-            <div className="block-header">
-              <div className="block-icon">
-                <Award size={20} />
-              </div>
+        {/* Combined Skill Gaps and Requirements Panel */}
+        {activeSection === "skills" && (
+          <section
+            className="section-panel"
+            id="panel-skills"
+            role="tabpanel"
+            aria-labelledby="tab-skills"
+          >
+            <div className="overview-section-heading">
               <div>
-                <h2>Transferable Skills</h2>
-                <span>Skills from past experiences and interests</span>
+                <h2>Skill gaps &amp; requirements</h2>
+                <p>
+                  Select a skill to inspect its status, evidence, importance,
+                  and target level. Unknown means not yet assessed.
+                </p>
               </div>
             </div>
 
-            <div className="transferable-list">
-              {transferableSkills.length > 0 ? (
-                transferableSkills.map((item, idx) => (
-                  <div key={idx} className="transferable-item">
-                    <div className="transferable-top">
-                      <strong>{item.skill}</strong>
-                      <span className={`relevance-tag rel-${item.relevance}`}>
-                        {item.relevance} relevance
-                      </span>
+            <div className="gaps-list">
+              {prioritySkills.map((gap, idx) => {
+                const config =
+                  STATUS_CONFIG[gap.status] || STATUS_CONFIG.assessment_needed;
+                const requirement = getRequirement(gap.skill);
+                const assessment = getAssessment(gap.skill);
+                const explanation = (gap.explanation || "").trim();
+                const evidence = (assessment?.evidence || "").trim();
+                const normalizedExplanation = normalizeSkillName(explanation);
+                const normalizedEvidence = normalizeSkillName(evidence);
+                const showSeparateEvidence =
+                  evidence &&
+                  normalizedEvidence !== normalizedExplanation &&
+                  !normalizedExplanation.includes(normalizedEvidence);
+
+                return (
+                  <details
+                    key={gap.skill + "-" + idx}
+                    className="gap-card skill-detail-card"
+                  >
+                    <summary className="skill-row-summary">
+                      <div className="skill-row-main">
+                        <div className="skill-row-title">
+                          <h3>{gap.skill}</h3>
+                          <span className={"status-badge " + config.badgeClass}>
+                            {config.label}
+                          </span>
+                        </div>
+
+                        <div className="level-comparison">
+                          <span className="level-pill current">
+                            <span>Current</span>
+                            <strong>{gap.current_level || "unknown"}</strong>
+                          </span>
+                          <span className="level-arrow">→</span>
+                          <span className="level-pill required">
+                            <span>Target</span>
+                            <strong>{gap.required_level}</strong>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="skill-row-importance">
+                        <span className="importance-label">AI-estimated importance</span>
+                        <strong>
+                          {requirement ? requirement.importance + "/100" : "—"}
+                        </strong>
+                      </div>
+                    </summary>
+
+                    <div className="gap-detail-content">
+                      {explanation && <p>{explanation}</p>}
+
+                      {showSeparateEvidence && (
+                        <p>
+                          <strong>Supporting evidence: </strong>
+                          {evidence}
+                        </p>
+                      )}
+
+                      <div className="gap-detail-meta">
+                        <span>
+                          Assessment basis:{" "}
+                          <strong>{assessment?.assessment_basis || "unknown"}</strong>
+                        </span>
+                        <span>
+                          Confidence:{" "}
+                          <strong>{assessment?.confidence || "unknown"}</strong>
+                        </span>
+                      </div>
+
+                      {requirement?.reason && (
+                        <p>
+                          <strong>Why it matters: </strong>
+                          {requirement.reason}
+                        </p>
+                      )}
                     </div>
+                  </details>
+                );
+              })}
+
+              {skillGaps.length === 0 && (
+                <p className="empty-notice">No skill-gap results are available yet.</p>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Transferable Strengths Panel */}
+        {activeSection === "strengths" && (
+          <section
+            className="section-panel"
+            id="panel-strengths"
+            role="tabpanel"
+            aria-labelledby="tab-strengths"
+          >
+            <div className="overview-section-heading">
+              <div>
+                <h2>Transferable strengths &amp; relevant background</h2>
+                <p>
+                  Existing skills, experience, interests, or motivations that
+                  may help with this direction. Interests are not proof of a
+                  demonstrated skill.
+                </p>
+              </div>
+            </div>
+
+            <div className="transferable-grid">
+              {transferableSkills.map((item, idx) => (
+                <details
+                  key={item.skill + "-" + idx}
+                  className="transferable-item strength-detail-card"
+                >
+                  <summary className="strength-summary">
+                    <span className="strength-name">{item.skill}</span>
+                    <span className={"relevance-tag rel-" + item.relevance}>
+                      {item.relevance} relevance
+                    </span>
+                  </summary>
+                  <div className="transferable-detail-content">
                     <span className="transferable-source">
                       Source: {item.source}
                     </span>
                     <p className="transferable-exp">{item.explanation}</p>
                   </div>
-                ))
-              ) : (
+                </details>
+              ))}
+
+              {transferableSkills.length === 0 && (
                 <p className="empty-notice">
-                  No previous transferable skills recorded yet.
+                  No transferable strengths have been identified yet.
                 </p>
               )}
             </div>
           </section>
-        </div>
+        )}
 
-        {/* Next Step / Roadmap CTA */}
-        <section className="roadmap-cta-banner">
-          <div>
-            <span className="skill-gap-eyebrow">READY FOR THE NEXT STEP?</span>
-            <h2>Personalized AI Learning Roadmap</h2>
-            <p>
-              Bridge these identified skill gaps step-by-step with a custom
-              learning plan generated specifically for your target direction.
-            </p>
-          </div>
-
-          <button
-            className="action-btn primary large"
-            onClick={() =>
-              navigate("/student/roadmap", {
-                state: { direction: gapData?.direction },
-              })
-            }
-          >
-            <Sparkles size={18} />
-            Generate / View Roadmap
-            <ArrowRight size={18} />
-          </button>
-        </section>
       </main>
     </div>
   );
