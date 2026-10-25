@@ -1083,8 +1083,18 @@ def get_career_directions(
 
     directions = [direction.model_dump() for direction in result.directions]
 
-    # Cache them
+    # Cache the new eligibility-aware paths and invalidate any old roadmap
+    # generated for a same-named activity/role under the previous prompt.
     latest_analysis.potential_directions = json.dumps(directions)
+    prior_path_analyses = (
+        db.query(CareerPivotAnalysis)
+        .filter(CareerPivotAnalysis.student_id == student_id)
+        .all()
+    )
+    for prior_analysis in prior_path_analyses:
+        prior_analysis.transition_difficulty = None
+        prior_analysis.transition_reason = "__ROADMAP_PENDING__"
+        prior_analysis.roadmap = None
 
     db.commit()
 
