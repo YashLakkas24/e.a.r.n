@@ -1031,7 +1031,7 @@ def get_skill_gap(
             },
         )
 
-    if not force_refresh:
+    if not force_refresh or status == "roadmap_processing":
         if status in ("completed", "skill_gap_ready", "roadmap_processing", "roadmap_error"):
             return {
                 "has_analysis": True,
@@ -1045,9 +1045,10 @@ def get_skill_gap(
                 "skill_gaps": parse_json_safely(cached.skill_gaps) or [],
                 "transition_difficulty": cached.transition_difficulty,
                 "transition_reason": (
-                    _career_error_message(cached) if status == "roadmap_error"
+                    _career_error_message(cached)
+                    if status == "roadmap_error"
                     else cached.transition_reason
-                    if status in ("completed", "roadmap_processing")
+                    if status == "completed"
                     else None
                 ),
                 "roadmap": parse_json_safely(cached.roadmap) or [],
