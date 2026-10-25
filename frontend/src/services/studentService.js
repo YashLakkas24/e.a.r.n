@@ -324,12 +324,16 @@ export async function getStudentInterestAnalysis(studentId) {
  * Fetch AI-discovered career directions for the student:
  * GET /api/students/{student_id}/career-directions
  */
-export async function getStudentCareerDirections(studentId) {
+export async function getStudentCareerDirections(
+  studentId,
+  forceRefresh = false,
+) {
   const cleanId = (studentId || "").trim().toUpperCase();
   if (!cleanId) throw new Error("Student ID is required.");
 
+  const query = forceRefresh ? "?force_refresh=true" : "";
   const response = await fetch(
-    `${API_BASE_URL}/api/students/${encodeURIComponent(cleanId)}/career-directions`,
+    `${API_BASE_URL}/api/students/${encodeURIComponent(cleanId)}/career-directions${query}`,
     {
       method: "GET",
       headers: await getAuthHeaders(),

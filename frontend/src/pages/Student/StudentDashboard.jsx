@@ -15,6 +15,7 @@ import {
   Sparkles,
   Puzzle,
   Compass,
+  Map,
   LogOut,
   GraduationCap,
   CalendarCheck,
@@ -141,8 +142,8 @@ function StudentDashboard() {
     },
     {
       id: "skills",
-      label: "Skill Gaps",
-      icon: Puzzle,
+      label: "Career Paths",
+      icon: Map,
     },
     {
       id: "roadmap",
@@ -188,7 +189,7 @@ function StudentDashboard() {
                   }
 
                   if (item.id === "skills") {
-                    navigate("/student/skills");
+                    navigate("/student/career-paths");
                     return;
                   }
 

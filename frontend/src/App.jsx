@@ -12,6 +12,7 @@ import InterestPlus from "./pages/Student/InterestPlus";
 import InterestQuestions from "./pages/Student/InterestQuestions";
 import InterestResult from "./pages/Student/InterestResult";
 import SkillGap from "./pages/Student/SkillGap";
+import CareerPathExplorer from "./pages/Student/CareerPathExplorer";
 import StudentRoadmap from "./pages/Student/StudentRoadmap";
 
 import ProtectedRoute from "./components/ProtectedRoute/ProtectedRoute";
@@ -97,6 +98,15 @@ function App() {
           element={
             <ProtectedRoute allowedRole="student">
               <InterestResult />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/student/career-paths"
+          element={
+            <ProtectedRoute allowedRole="student">
+              <CareerPathExplorer />
             </ProtectedRoute>
           }
         />
