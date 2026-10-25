@@ -215,11 +215,13 @@ def generate_roadmap_for_skill_analysis(
     existing_skills: list[str] | None = None,
     previous_interests: list[str] | None = None,
     student_profile: dict | None = None,
+    career_path: dict | None = None,
 ) -> TransitionRoadmapResult:
     """Generate the career-entry roadmap separately, on demand."""
     existing_skills = existing_skills or []
     previous_interests = previous_interests or []
     student_profile = student_profile or {}
+    career_path = career_path or {}
     official_resources = get_official_resources_for_direction(
         skill_analysis.direction,
         student_profile.get("state_or_ut"),
@@ -236,6 +238,7 @@ def generate_roadmap_for_skill_analysis(
         skill_gaps=skill_analysis.skill_gaps,
         student_profile=student_profile,
         official_resources=official_resources,
+        career_path=career_path,
     )
     print(
         f"[CAREER PIVOT TIMING] Roadmap generation completed in "
