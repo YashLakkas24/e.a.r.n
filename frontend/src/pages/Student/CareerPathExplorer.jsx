@@ -7,6 +7,7 @@ import {
   BrainCircuit,
   BriefcaseBusiness,
   ChartNoAxesCombined,
+  CalendarClock,
   CheckCircle2,
   CircleHelp,
   Code2,
