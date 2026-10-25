@@ -73,18 +73,35 @@ function SkillGap() {
   const studentId = getStudentId();
 
   const waitForSkillGap = async (direction) => {
-  for (let i = 0; i < 30; i++) {
-    const res = await getStudentSkillGap(studentId, direction);
+    // Core skill-gap analysis no longer waits for roadmap generation.
+    // Allow for slow upstream model responses while polling the backend job.
+    const deadline = Date.now() + 6 * 60 * 1000;
+    let delayMs = 2000;
 
-    if (res.status !== "processing") {
-      return res;
+    while (Date.now() < deadline) {
+      const res = await getStudentSkillGap(studentId, direction);
+
+      if (res.status !== "processing") {
+        if (res.status === "error") {
+          throw new Error(res.detail || "Skill-gap analysis failed.");
+        }
+        return res;
+      }
+
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) break;
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(delayMs, remainingMs)),
+      );
+      delayMs = Math.min(Math.round(delayMs * 1.35), 5000);
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-  }
-
-  throw new Error("Skill gap analysis timed out.");
-};
+    throw new Error(
+      "Skill-gap analysis is taking longer than expected. " +
+        "The job may still be running; try again shortly.",
+    );
+  };
   // Load directions list and initial skill gap
   useEffect(() => {
     let isMounted = true;
@@ -238,10 +255,9 @@ if (res.has_analysis) {
         <main className="skill-gap-main">
           <section className="state-card">
             <div className="ai-spinner" />
-            <h2>Comparing Skills with Industry Requirements...</h2>
+            <h2>Assessing required skills and available evidence...</h2>
             <p>
-              The AI is evaluating your Interest Profile against
-              industry-standard capabilities.
+              The analysis is identifying required skills and checking available evidence. Your learning roadmap is generated separately when you open it.
             </p>
           </section>
         </main>
