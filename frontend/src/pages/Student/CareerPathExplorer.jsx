@@ -756,9 +756,10 @@ function CareerPathExplorer() {
           <p>
             <strong>Important:</strong> these are ranked career options, not a
             guarantee of selection. “NOT POSSIBLE” should only appear for a
-            documented hard barrier. Missing or changing eligibility rules must
-            be verified against the relevant official notification or admissions
-            page before making a decision.
+            documented hard barrier. The linked official portals help you check
+            current notices; this screen does not claim that a vacancy or
+            application window is currently open. Verify eligibility against the
+            relevant official notification or admissions page before deciding.
           </p>
         </aside>
       </main>
