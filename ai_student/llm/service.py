@@ -1,4 +1,3 @@
-import os
 import json
 import time
 
@@ -43,18 +42,13 @@ from ai_student.career_pivot.schemas import (
 # OPENAI MODEL CONFIGURATION
 # ============================================================
 
-DEFAULT_MODEL = os.getenv("AI_MODEL", "gpt-5-nano")
-CAREER_PIVOT_MODEL = (
-    os.getenv("CAREER_PIVOT_MODEL")
-    or os.getenv("SKILL_GAP_MODEL")  # Backward compatibility with existing deployments
-    or "gpt-4o-mini"
-)
+# Use one model consistently across all AI tasks in this service.
+# Environment variables intentionally cannot override this selection.
+MODEL_NAME = "gpt-5.4-nano"
 
-VALID_MODELS = [
-    DEFAULT_MODEL,
-]
-# Remove duplicates while preserving order
-VALID_MODELS = list(dict.fromkeys(VALID_MODELS))
+DEFAULT_MODEL = MODEL_NAME
+CAREER_PIVOT_MODEL = MODEL_NAME
+VALID_MODELS = [MODEL_NAME]
 
 
 def parse_json_from_llm(content: str) -> dict:
