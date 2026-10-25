@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Milestone,
   Target,
+  CalendarClock,
 } from "lucide-react";
 import {
   getStudentRoadmap,
