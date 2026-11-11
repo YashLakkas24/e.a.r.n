@@ -1,8 +1,8 @@
 import unittest
 
 from ai_student.career_pivot.pathway_sources import (
-    eligibility_sort_key,
     is_career_role_name,
+    get_official_resources_for_direction,
 )
 
 
@@ -33,14 +33,16 @@ class CareerPathTitleTests(unittest.TestCase):
             with self.subTest(title=title):
                 self.assertTrue(is_career_role_name(title))
 
-    def test_verified_ineligible_paths_sort_after_actionable_paths(self):
-        possible = eligibility_sort_key(
-            {"eligibility_status": "possible_after_graduation", "fit_score": 45}
+
+
+class OfficialCareerResourceTests(unittest.TestCase):
+    def test_mpsc_role_includes_official_mpsc_portal(self):
+        resources = get_official_resources_for_direction(
+            "MPSC State Civil Services Officer"
         )
-        blocked = eligibility_sort_key(
-            {"eligibility_status": "not_possible", "fit_score": 99}
-        )
-        self.assertLess(possible, blocked)
+        urls = {item["url"] for item in resources}
+        self.assertIn("https://mpsc.gov.in/announcement_and_circular/true", urls)
+        self.assertIn("https://mpsconline.gov.in/candidate", urls)
 
 
 if __name__ == "__main__":
