@@ -11,9 +11,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from datetime import datetime
-from database import Base, engine
-
-Base.metadata.create_all(bind=engine)
+from database import Base
 
 # ============================================================
 # USER
@@ -222,24 +220,6 @@ class CareerPivotAnalysis(Base):
     roadmap = Column(Text, nullable=True)
 
 
-class CareerEligibilityProfile(Base):
-    __tablename__ = "career_eligibility_profiles"
-
-    id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(
-        String,
-        ForeignKey("students.student_id"),
-        nullable=False,
-        unique=True,
-        index=True,
-    )
-    age = Column(Integer, nullable=False)
-    highest_qualification = Column(String, nullable=False)
-    study_stream = Column(String, nullable=False)
-    citizenship = Column(String, nullable=False)
-    state = Column(String, nullable=False, default="")
-
-
 # ============================================================
 # NOTICE
 # ============================================================
@@ -325,16 +305,19 @@ class Notification(Base):
 # CAREER ELIGIBILITY PROFILE
 # ============================================================
 
-class CareerEligibilityProfile(Base):
-    """Minimum profile facts used to assess career entry requirements.
 
-    Sensitive reservation details are not collected. Students can indicate
-    whether an age/marks relaxation may apply without specifying a category.
-    """
+# ============================================================
+# CAREER ELIGIBILITY PROFILE
+# ============================================================
+
+
+class CareerEligibilityProfile(Base):
+    """Minimum profile facts used to assess career entry requirements."""
 
     __tablename__ = "career_eligibility_profiles"
 
     id = Column(Integer, primary_key=True, index=True)
+
     student_id = Column(
         String,
         ForeignKey("students.student_id"),
@@ -342,9 +325,15 @@ class CareerEligibilityProfile(Base):
         unique=True,
         index=True,
     )
+
     profile = Column(JSON, nullable=False, default=dict)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
 
 
 # Re-run after all model classes are registered so new tables are created.
-Base.metadata.create_all(bind=engine)
