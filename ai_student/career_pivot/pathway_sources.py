@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-CAREER_PATH_VERSION = "career_role_routes_v3"
+CAREER_PATH_VERSION = "career_role_routes_v4"
 
 
 def get_official_resources_for_direction(
