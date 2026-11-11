@@ -2,14 +2,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-EligibilityStatus = Literal[
-    "possible_now",
-    "possible_after_graduation",
-    "additional_qualification_required",
-    "needs_more_information",
-    "not_possible",
-]
-
 PathwayType = Literal[
     "competitive_exam",
     "direct_recruitment",
@@ -32,6 +24,7 @@ RoadmapStepType = Literal[
     "job_search",
     "other",
 ]
+
 
 class CareerResource(BaseModel):
     label: str
@@ -70,13 +63,12 @@ class Direction(BaseModel):
     pathway_version: Literal["career_role_routes_v3"] = "career_role_routes_v3"
     pathway_type: PathwayType = "other"
     pathway_summary: str = ""
-    eligibility_status: EligibilityStatus = "needs_more_information"
-    eligibility_reason: str = ""
-    missing_information: list[str] = Field(default_factory=list)
     official_resources: list[CareerResource] = Field(default_factory=list)
+
 
 class DirectionDiscoveryResult(BaseModel):
     directions: list[Direction]
+
 
 class SkillRequirement(BaseModel):
     skill: str
@@ -84,9 +76,11 @@ class SkillRequirement(BaseModel):
     required_level: SkillLevel
     reason: str
 
+
 class SkillDiscoveryResult(BaseModel):
     direction: str
     skills: list[SkillRequirement]
+
 
 class SkillAssessment(BaseModel):
     skill: str
@@ -95,8 +89,10 @@ class SkillAssessment(BaseModel):
     confidence: ConfidenceLevel
     evidence: str
 
+
 class SkillAssessmentResult(BaseModel):
     skill_assessments: list[SkillAssessment]
+
 
 class TransferableSkill(BaseModel):
     skill: str
@@ -108,9 +104,11 @@ class TransferableSkill(BaseModel):
     ]
     explanation: str
 
+
 class TransferableSkillResult(BaseModel):
     direction: str
     transferable_skills: list[TransferableSkill]
+
 
 class SkillGap(BaseModel):
     skill: str
@@ -124,10 +122,10 @@ class SkillGap(BaseModel):
     ]
     explanation: str
 
+
 class SkillGapResult(BaseModel):
     direction: str
-    skill_gaps: list[SkillGap]    
-
+    skill_gaps: list[SkillGap]
 
 
 class CareerSkillGapAnalysis(BaseModel):
@@ -155,6 +153,7 @@ class RoadmapStep(BaseModel):
     official_resource_label: str = ""
     official_resource_url: str = ""
 
+
 class TransitionRoadmapResult(BaseModel):
     transition_difficulty: Literal[
         "low",
@@ -166,11 +165,13 @@ class TransitionRoadmapResult(BaseModel):
 
     roadmap: list[RoadmapStep]
 
+
 class CareerDirectionAnalysis(BaseModel):
     """
     Complete Career Pivot analysis for ONE direction
     selected by the student.
     """
+
     direction: str
 
     required_skills: list[SkillRequirement]

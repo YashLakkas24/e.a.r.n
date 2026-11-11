@@ -18,7 +18,6 @@ import {
 import {
   getStudentRoadmap,
   getStudentCareerDirections,
-  getStudentCareerEligibilityProfile,
 } from "../../services/studentService";
 import "./StudentRoadmap.css";
 
@@ -113,12 +112,6 @@ function StudentRoadmap() {
         setLoading(true);
         setError("");
 
-        const eligibilityProfile = await getStudentCareerEligibilityProfile(studentId);
-        if (!eligibilityProfile.has_profile) {
-          navigate("/student/career-paths", { replace: true });
-          return;
-        }
-
         let availableDirs = [];
         try {
           const dirRes = await getStudentCareerDirections(studentId);
@@ -157,7 +150,10 @@ function StudentRoadmap() {
 
         const res = await waitForRoadmap(targetDir);
 
-        if (res.status === "profile_required" || res.status === "path_not_found") {
+        if (
+          res.status === "profile_required" ||
+          res.status === "path_not_found"
+        ) {
           navigate("/student/career-paths", { replace: true });
           return;
         }
@@ -339,7 +335,9 @@ function StudentRoadmap() {
 
   const steps = roadmapData?.roadmap || [];
   const selectedCareerPath =
-    directions.find((item) => item.name === (roadmapData?.direction || selectedDirection)) ||
+    directions.find(
+      (item) => item.name === (roadmapData?.direction || selectedDirection),
+    ) ||
     location.state?.careerPath ||
     roadmapData?.career_path ||
     null;
@@ -369,13 +367,19 @@ function StudentRoadmap() {
         <button
           className="roadmap-refresh-btn"
           onClick={handleRefresh}
-          title={isBlockedPath
-            ? "This path is flagged as not possible under the supplied profile. Review the eligibility details and official source links."
-            : "Rebuild the career-entry roadmap from the selected role and saved eligibility profile"}
+          title={
+            isBlockedPath
+              ? "This path is flagged as not possible under the supplied profile. Review the eligibility details and official source links."
+              : "Rebuild the career-entry roadmap from the selected role and saved eligibility profile"
+          }
           disabled={refreshing || isBlockedPath}
         >
           <RotateCcw size={14} className={refreshing ? "spin-icon" : ""} />
-          {isBlockedPath ? "Eligibility blocked" : refreshing ? "Synthesizing..." : "Regenerate Path"}
+          {isBlockedPath
+            ? "Eligibility blocked"
+            : refreshing
+              ? "Synthesizing..."
+              : "Regenerate Path"}
         </button>
       </header>
 
@@ -385,8 +389,8 @@ function StudentRoadmap() {
           <span className="roadmap-eyebrow">STEP-BY-STEP TRANSITION PATH</span>
           <h1>Career Entry Roadmap</h1>
           <p>
-            Follow the qualification, exam or admission steps, applications,
-            and targeted preparation needed to pursue{" "}
+            Follow the qualification, exam or admission steps, applications, and
+            targeted preparation needed to pursue{" "}
             <strong>{roadmapData?.direction || "your selected role"}</strong>.
           </p>
         </section>
@@ -439,7 +443,9 @@ function StudentRoadmap() {
                   </span>
                 ) : null}
                 <span className="milestones-count">
-                  {isBlockedPath ? "Eligibility barrier identified" : `${steps.length} Entry Steps`}
+                  {isBlockedPath
+                    ? "Eligibility barrier identified"
+                    : `${steps.length} Entry Steps`}
                 </span>
               </div>
             </div>
@@ -477,11 +483,15 @@ function StudentRoadmap() {
           )}
 
           {selectedCareerPath?.eligibility_reason && (
-            <div className={`roadmap-eligibility-reason ${isBlockedPath ? "blocked" : ""}`}>
+            <div
+              className={`roadmap-eligibility-reason ${isBlockedPath ? "blocked" : ""}`}
+            >
               {isBlockedPath && <AlertTriangle size={17} />}
               <div>
                 <strong>
-                  {isBlockedPath ? "Why this route is flagged" : "Eligibility assessment"}
+                  {isBlockedPath
+                    ? "Why this route is flagged"
+                    : "Eligibility assessment"}
                 </strong>
                 <p>{selectedCareerPath.eligibility_reason}</p>
               </div>
@@ -494,7 +504,12 @@ function StudentRoadmap() {
                 <strong>Official sources to verify requirements</strong>
                 <div>
                   {selectedCareerPath.official_resources.map((resource) => (
-                    <a key={resource.url} href={resource.url} target="_blank" rel="noreferrer">
+                    <a
+                      key={resource.url}
+                      href={resource.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       {resource.label} <ChevronRight size={14} />
                     </a>
                   ))}
@@ -528,7 +543,11 @@ function StudentRoadmap() {
             <h3>Explore these alternatives first</h3>
             <div className="roadmap-alternative-list">
               {directions
-                .filter((item) => item.name !== roadmapData?.direction && item.eligibility_status !== "not_possible")
+                .filter(
+                  (item) =>
+                    item.name !== roadmapData?.direction &&
+                    item.eligibility_status !== "not_possible",
+                )
                 .slice(0, 3)
                 .map((item) => (
                   <button
@@ -538,7 +557,9 @@ function StudentRoadmap() {
                   >
                     <span>
                       <strong>{item.name}</strong>
-                      <small>{item.eligibility_reason || item.pathway_summary}</small>
+                      <small>
+                        {item.eligibility_reason || item.pathway_summary}
+                      </small>
                     </span>
                     <ArrowRight size={16} />
                   </button>
@@ -546,92 +567,101 @@ function StudentRoadmap() {
             </div>
           </section>
         ) : (
-        <section className="timeline-section">
-          <div className="timeline-header">
-            <div className="timeline-icon">
-              <Milestone size={20} />
+          <section className="timeline-section">
+            <div className="timeline-header">
+              <div className="timeline-icon">
+                <Milestone size={20} />
+              </div>
+              <div>
+                <h2>Career Entry Roadmap</h2>
+                <span>
+                  Qualifications, exams, admissions, applications and skill
+                  development in the order needed for this route
+                </span>
+              </div>
             </div>
-            <div>
-              <h2>Career Entry Roadmap</h2>
-              <span>
-                Qualifications, exams, admissions, applications and skill
-                development in the order needed for this route
-              </span>
-            </div>
-          </div>
 
-          <div className="timeline-steps">
-            {steps.map((step, idx) => {
-              const stepNumber = step.step || idx + 1;
-              const paddedNumber =
-                stepNumber < 10 ? `0${stepNumber}` : stepNumber;
+            <div className="timeline-steps">
+              {steps.map((step, idx) => {
+                const stepNumber = step.step || idx + 1;
+                const paddedNumber =
+                  stepNumber < 10 ? `0${stepNumber}` : stepNumber;
 
-              return (
-                <div key={idx} className="timeline-item">
-                  <div className="timeline-marker">
-                    <div className="marker-number">{paddedNumber}</div>
-                    {idx < steps.length - 1 && <div className="marker-line" />}
-                  </div>
-
-                  <div className="timeline-card">
-                    <div className="timeline-card-header">
-                      <span className="step-tag">Step {paddedNumber}</span>
-                      <h3>{step.title}</h3>
-                    </div>
-
-                    <div className="route-step-meta">
-                      {step.route_type && (
-                        <span className={`route-step-type route-type-${step.route_type}`}>
-                          {String(step.route_type).replaceAll("_", " ")}
-                        </span>
-                      )}
-                      {step.estimated_duration && (
-                        <span className="route-step-duration">
-                          <CalendarClock size={13} /> {step.estimated_duration}
-                        </span>
+                return (
+                  <div key={idx} className="timeline-item">
+                    <div className="timeline-marker">
+                      <div className="marker-number">{paddedNumber}</div>
+                      {idx < steps.length - 1 && (
+                        <div className="marker-line" />
                       )}
                     </div>
 
-                    <p className="step-description">{step.description}</p>
-
-                    {step.completion_evidence && (
-                      <div className="step-completion-evidence">
-                        <CheckCircle2 size={15} />
-                        <p><strong>Completion evidence:</strong> {step.completion_evidence}</p>
+                    <div className="timeline-card">
+                      <div className="timeline-card-header">
+                        <span className="step-tag">Step {paddedNumber}</span>
+                        <h3>{step.title}</h3>
                       </div>
-                    )}
 
-                    {step.official_resource_url && (
-                      <a
-                        className="step-official-link"
-                        href={step.official_resource_url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {step.official_resource_label || "Open official source"}
-                        <ChevronRight size={14} />
-                      </a>
-                    )}
+                      <div className="route-step-meta">
+                        {step.route_type && (
+                          <span
+                            className={`route-step-type route-type-${step.route_type}`}
+                          >
+                            {String(step.route_type).replaceAll("_", " ")}
+                          </span>
+                        )}
+                        {step.estimated_duration && (
+                          <span className="route-step-duration">
+                            <CalendarClock size={13} />{" "}
+                            {step.estimated_duration}
+                          </span>
+                        )}
+                      </div>
 
-                    {Array.isArray(step.skills) && step.skills.length > 0 && (
-                      <div className="step-skills-wrap">
-                        <span className="skills-label">Focus Skills:</span>
-                        <div className="skills-tags">
-                          {step.skills.map((skill, sIdx) => (
-                            <span key={sIdx} className="skill-tag">
-                              <Target size={12} />
-                              {skill}
-                            </span>
-                          ))}
+                      <p className="step-description">{step.description}</p>
+
+                      {step.completion_evidence && (
+                        <div className="step-completion-evidence">
+                          <CheckCircle2 size={15} />
+                          <p>
+                            <strong>Completion evidence:</strong>{" "}
+                            {step.completion_evidence}
+                          </p>
                         </div>
-                      </div>
-                    )}
+                      )}
+
+                      {step.official_resource_url && (
+                        <a
+                          className="step-official-link"
+                          href={step.official_resource_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {step.official_resource_label ||
+                            "Open official source"}
+                          <ChevronRight size={14} />
+                        </a>
+                      )}
+
+                      {Array.isArray(step.skills) && step.skills.length > 0 && (
+                        <div className="step-skills-wrap">
+                          <span className="skills-label">Focus Skills:</span>
+                          <div className="skills-tags">
+                            {step.skills.map((skill, sIdx) => (
+                              <span key={sIdx} className="skill-tag">
+                                <Target size={12} />
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+                );
+              })}
+            </div>
+          </section>
         )}
 
         {/* Footer Navigation */}

@@ -505,8 +505,7 @@ Interest analysis:
 {json.dumps(interest_analysis, indent=2)}
 
 Career eligibility profile:
-{json.dumps(student_profile, indent=2)}
-{rejected_titles_note}
+ {rejected_titles_note}
 
 Identify exactly 5 realistic career roles or specialization pathways. For each,
 provide the pathway type, a concise entry-route summary, and a conservative
@@ -575,9 +574,19 @@ Use only the JSON structure defined in the system instructions.
         for direction in directions:
             if not isinstance(direction, dict):
                 continue
-            status = str(direction.get("eligibility_status", "needs_more_information")).strip().lower().replace(" ", "_")
+            status = (
+                str(direction.get("eligibility_status", "needs_more_information"))
+                .strip()
+                .lower()
+                .replace(" ", "_")
+            )
             direction["eligibility_status"] = status_aliases.get(status, status)
-            pathway_type = str(direction.get("pathway_type", "other")).strip().lower().replace(" ", "_")
+            pathway_type = (
+                str(direction.get("pathway_type", "other"))
+                .strip()
+                .lower()
+                .replace(" ", "_")
+            )
             direction["pathway_type"] = pathway_aliases.get(pathway_type, pathway_type)
 
             missing = direction.get("missing_information", [])
@@ -587,7 +596,10 @@ Use only the JSON structure defined in the system instructions.
                 direction["missing_information"] = []
 
             # Incomplete facts cannot justify an absolute negative decision.
-            if direction["eligibility_status"] == "not_possible" and direction["missing_information"]:
+            if (
+                direction["eligibility_status"] == "not_possible"
+                and direction["missing_information"]
+            ):
                 direction["eligibility_status"] = "needs_more_information"
 
         return DirectionDiscoveryResult.model_validate(data)

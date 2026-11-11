@@ -8,8 +8,6 @@ from ai_student.llm.service import (
 )
 
 from ai_student.career_pivot.pathway_sources import (
-    eligibility_sort_key,
-    enforce_verified_eligibility,
     get_official_resources_for_direction,
     is_career_role_name,
 )
@@ -24,16 +22,15 @@ from ai_student.career_pivot.schemas import (
     TransitionRoadmapResult,
 )
 
-
 # ============================================================
 # STAGE 1 — DISCOVER CAREER DIRECTIONS
 # ============================================================
+
 
 def discover_career_directions(
     existing_skills: list[str] | None = None,
     previous_interests: list[str] | None = None,
     interest_analysis: dict | None = None,
-    student_profile: dict | None = None,
 ) -> DirectionDiscoveryResult:
 
     existing_skills = existing_skills or []
@@ -56,7 +53,6 @@ def discover_career_directions(
         existing_skills=existing_skills,
         previous_interests=previous_interests,
         interest_analysis=interest_analysis,
-        student_profile=student_profile,
     )
 
     # Prompts alone are not a reliable guard against activity-like output. Reject
@@ -65,8 +61,7 @@ def discover_career_directions(
     # as a career just to reach a fixed count.
     first_pass = list(direction_result.directions)
     rejected_titles = [
-        item.name for item in first_pass
-        if not is_career_role_name(item.name)
+        item.name for item in first_pass if not is_career_role_name(item.name)
     ]
     if rejected_titles:
         print(
@@ -83,12 +78,8 @@ def discover_career_directions(
             rejected_directions=rejected_titles,
         )
 
-        candidates = [
-            item for item in first_pass
-            if is_career_role_name(item.name)
-        ] + [
-            item for item in retry_result.directions
-            if is_career_role_name(item.name)
+        candidates = [item for item in first_pass if is_career_role_name(item.name)] + [
+            item for item in retry_result.directions if is_career_role_name(item.name)
         ]
         deduplicated = []
         seen_names = set()
@@ -101,8 +92,7 @@ def discover_career_directions(
 
     # Final safety net: invalid titles must never reach the student UI.
     direction_result.directions = [
-        item for item in direction_result.directions
-        if is_career_role_name(item.name)
+        item for item in direction_result.directions if is_career_role_name(item.name)
     ]
 
     # Add official entry portals deterministically; the model is not allowed
@@ -128,11 +118,10 @@ def discover_career_directions(
             )
         ]
 
-        enforce_verified_eligibility(direction, student_profile)
-
-
-
-    direction_result.directions.sort(key=lambda item: eligibility_sort_key(item.model_dump()))
+    direction_result.directions.sort(
+        key=lambda item: item.fit_score,
+        reverse=True,
+    )
 
     # ========================================================
     # Safety guard
@@ -149,10 +138,7 @@ def discover_career_directions(
         direction_result.directions,
         start=1,
     ):
-        print(
-            f"{index}. {direction.name} "
-            f"(fit: {direction.fit_score})"
-        )
+        print(f"{index}. {direction.name} " f"(fit: {direction.fit_score})")
 
     return direction_result
 
@@ -160,6 +146,7 @@ def discover_career_directions(
 # ============================================================
 # STAGES 2–6 — ANALYZE ONLY THE SELECTED DIRECTION
 # ============================================================
+
 
 def analyze_selected_skills(
     selected_direction: str,
@@ -333,6 +320,7 @@ def analyze_selected_direction(
 # ============================================================
 # BACKWARD-COMPATIBILITY WRAPPER
 # ============================================================
+
 
 def run_career_pivot_pipeline(
     existing_skills: list[str] | None = None,

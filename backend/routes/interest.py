@@ -18,7 +18,6 @@ from models import (
     QuizAnswer,
     InterestAnalysis,
     CareerPivotAnalysis,
-    CareerEligibilityProfile,
 )
 
 from auth_dependencies import require_student
@@ -93,29 +92,29 @@ class CareerDirectionAnalyzeRequest(BaseModel):
     force_refresh: bool = False
 
 
-class CareerEligibilityProfilePayload(BaseModel):
-    age: int | None = Field(default=None, ge=14, le=100)
-    highest_qualification: Literal[
-        "below_10th", "10th", "12th", "diploma", "undergraduate",
-        "postgraduate", "other", "unknown"
-    ] = "unknown"
-    education_status: Literal[
-        "studying", "completed", "not_studying", "unknown"
-    ] = "unknown"
-    field_of_study: str = Field(default="", max_length=160)
-    current_study_year: int | None = Field(default=None, ge=1, le=12)
-    expected_graduation_year: int | None = Field(default=None, ge=2020, le=2045)
-    state_or_ut: str = Field(default="", max_length=100)
-    citizenship_status: Literal[
-        "indian_citizen", "other_citizenship", "unknown"
-    ] = "unknown"
-    age_or_marks_relaxation: Literal["yes", "no", "unknown"] = "unknown"
-    willing_to_pursue_further_study: bool = True
-    willing_to_prepare_for_competitive_exams: bool = True
-    preferred_entry_timeline: Literal[
-        "as_soon_as_eligible", "after_graduation", "within_3_years",
-        "flexible", "unknown"
-    ] = "unknown"
+# class CareerEligibilityProfilePayload(BaseModel):
+#     age: int | None = Field(default=None, ge=14, le=100)
+#     highest_qualification: Literal[
+#         "below_10th", "10th", "12th", "diploma", "undergraduate",
+#         "postgraduate", "other", "unknown"
+#     ] = "unknown"
+#     education_status: Literal[
+#         "studying", "completed", "not_studying", "unknown"
+#     ] = "unknown"
+#     field_of_study: str = Field(default="", max_length=160)
+#     current_study_year: int | None = Field(default=None, ge=1, le=12)
+#     expected_graduation_year: int | None = Field(default=None, ge=2020, le=2045)
+#     state_or_ut: str = Field(default="", max_length=100)
+#     citizenship_status: Literal[
+#         "indian_citizen", "other_citizenship", "unknown"
+#     ] = "unknown"
+#     age_or_marks_relaxation: Literal["yes", "no", "unknown"] = "unknown"
+#     willing_to_pursue_further_study: bool = True
+#     willing_to_prepare_for_competitive_exams: bool = True
+#     preferred_entry_timeline: Literal[
+#         "as_soon_as_eligible", "after_graduation", "within_3_years",
+#         "flexible", "unknown"
+#     ] = "unknown"
 
 
 # ============================================================
@@ -653,15 +652,6 @@ def _get_student_context(student_id: str, db: Session):
                 "extracurricular_count": (student_record.extracurricular_count),
             }
 
-    eligibility_record = (
-        db.query(CareerEligibilityProfile)
-        .filter(CareerEligibilityProfile.student_id == student_id)
-        .first()
-    )
-    analysis_dict["career_eligibility_profile"] = (
-        eligibility_record.profile if eligibility_record else {}
-    )
-
     return (latest_analysis, analysis_dict, existing_skills, previous_interests)
 
 
@@ -851,7 +841,8 @@ def _run_roadmap_background(
         saved_paths = analysis_dict.get("potential_directions") or []
         selected_path = next(
             (
-                item for item in saved_paths
+                item
+                for item in saved_paths
                 if isinstance(item, dict) and item.get("name") == target_direction
             ),
             {},
@@ -868,7 +859,8 @@ def _run_roadmap_background(
                 "direction": cached.direction,
                 "required_skills": parse_json_safely(cached.required_skills) or [],
                 "skill_assessments": parse_json_safely(cached.skill_assessments) or [],
-                "transferable_skills": parse_json_safely(cached.transferable_skills) or [],
+                "transferable_skills": parse_json_safely(cached.transferable_skills)
+                or [],
                 "skill_gaps": parse_json_safely(cached.skill_gaps) or [],
             }
         )
@@ -919,96 +911,13 @@ def _run_roadmap_background(
                 # Preserve successful skill-gap results when only roadmap
                 # generation fails; a retry should not repeat core analysis.
                 cached.transition_difficulty = None
-                cached.transition_reason = (
-                    f"__ROADMAP_ERROR__:{type(e).__name__}: {e}"
-                )
+                cached.transition_reason = f"__ROADMAP_ERROR__:{type(e).__name__}: {e}"
                 cached.roadmap = None
                 db.commit()
         except Exception:
             db.rollback()
     finally:
         db.close()
-
-
-# ============================================================
-# CAREER ELIGIBILITY PROFILE
-# ============================================================
-
-
-@router.get("/{student_id}/career-eligibility-profile")
-def get_career_eligibility_profile(
-    student_id: str,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(require_student),
-):
-    verify_student_access(student_id, current_user)
-    record = (
-        db.query(CareerEligibilityProfile)
-        .filter(CareerEligibilityProfile.student_id == student_id)
-        .first()
-    )
-    return {
-        "has_profile": bool(record),
-        "profile": record.profile if record else None,
-        "updated_at": record.updated_at.isoformat() if record and record.updated_at else None,
-    }
-
-
-@router.put("/{student_id}/career-eligibility-profile")
-def save_career_eligibility_profile(
-    student_id: str,
-    payload: CareerEligibilityProfilePayload,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(require_student),
-):
-    verify_student_access(student_id, current_user)
-    student = db.query(Student).filter(Student.student_id == student_id).first()
-    if not student:
-        raise HTTPException(status_code=404, detail="Student not found")
-
-    profile = payload.model_dump()
-    record = (
-        db.query(CareerEligibilityProfile)
-        .filter(CareerEligibilityProfile.student_id == student_id)
-        .first()
-    )
-    if record:
-        record.profile = profile
-        record.updated_at = datetime.utcnow()
-    else:
-        record = CareerEligibilityProfile(student_id=student_id, profile=profile)
-        db.add(record)
-
-    # Invalidate generated role suggestions so they are re-ranked for the
-    # newly supplied education/eligibility situation.
-    latest_analysis = (
-        db.query(InterestAnalysis)
-        .filter(InterestAnalysis.student_id == student_id)
-        .order_by(InterestAnalysis.id.desc())
-        .first()
-    )
-    if latest_analysis:
-        latest_analysis.potential_directions = None
-
-    # Keep existing skill assessments, but regenerate roadmap route steps
-    # using the new eligibility profile the next time a roadmap is opened.
-    pivot_records = (
-        db.query(CareerPivotAnalysis)
-        .filter(CareerPivotAnalysis.student_id == student_id)
-        .all()
-    )
-    for item in pivot_records:
-        item.transition_difficulty = None
-        item.transition_reason = "__ROADMAP_PENDING__"
-        item.roadmap = None
-
-    db.commit()
-    db.refresh(record)
-    return {
-        "has_profile": True,
-        "profile": record.profile,
-        "updated_at": record.updated_at.isoformat() if record.updated_at else None,
-    }
 
 
 # ============================================================
@@ -1188,7 +1097,12 @@ def get_skill_gap(
         )
 
     if not force_refresh or status == "roadmap_processing":
-        if status in ("completed", "skill_gap_ready", "roadmap_processing", "roadmap_error"):
+        if status in (
+            "completed",
+            "skill_gap_ready",
+            "roadmap_processing",
+            "roadmap_error",
+        ):
             return {
                 "has_analysis": True,
                 "status": status,
@@ -1197,15 +1111,14 @@ def get_skill_gap(
                 "direction": cached.direction,
                 "required_skills": parse_json_safely(cached.required_skills) or [],
                 "skill_assessments": parse_json_safely(cached.skill_assessments) or [],
-                "transferable_skills": parse_json_safely(cached.transferable_skills) or [],
+                "transferable_skills": parse_json_safely(cached.transferable_skills)
+                or [],
                 "skill_gaps": parse_json_safely(cached.skill_gaps) or [],
                 "transition_difficulty": cached.transition_difficulty,
                 "transition_reason": (
                     _career_error_message(cached)
                     if status == "roadmap_error"
-                    else cached.transition_reason
-                    if status == "completed"
-                    else None
+                    else cached.transition_reason if status == "completed" else None
                 ),
                 "roadmap": parse_json_safely(cached.roadmap) or [],
             }
@@ -1312,17 +1225,6 @@ def get_roadmap(
         else:
             target_direction = latest_analysis.interest
 
-    eligibility_profile = analysis_dict.get("career_eligibility_profile") or {}
-    if not eligibility_profile:
-        return {
-            "has_analysis": False,
-            "status": "profile_required",
-            "student_id": student_id,
-            "direction": target_direction,
-            "detail": "Complete your career eligibility profile before generating an entry roadmap.",
-            "roadmap": [],
-        }
-
     saved_paths = parse_json_safely(latest_analysis.potential_directions) or []
     paths_are_eligibility_aware = bool(saved_paths) and all(
         isinstance(item, dict)
@@ -1339,9 +1241,7 @@ def get_roadmap(
             interest_analysis=analysis_dict,
             student_profile=eligibility_profile,
         )
-        saved_paths = [
-            item.model_dump() for item in direction_result.directions
-        ]
+        saved_paths = [item.model_dump() for item in direction_result.directions]
         latest_analysis.potential_directions = json.dumps(saved_paths)
 
         # These paths may have been generated under an older activity-based
@@ -1367,7 +1267,8 @@ def get_roadmap(
 
     selected_path = next(
         (
-            item for item in saved_paths
+            item
+            for item in saved_paths
             if isinstance(item, dict) and item.get("name") == target_direction
         ),
         None,

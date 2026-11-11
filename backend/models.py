@@ -307,25 +307,25 @@ class Notification(Base):
 # CAREER ELIGIBILITY PROFILE
 # ============================================================
 
-class CareerEligibilityProfile(Base):
-    """Minimum profile facts used to assess career entry requirements.
+# class CareerEligibilityProfile(Base):
+#     """Minimum profile facts used to assess career entry requirements.
 
-    Sensitive reservation details are not collected. Students can indicate
-    whether an age/marks relaxation may apply without specifying a category.
-    """
+#     Sensitive reservation details are not collected. Students can indicate
+#     whether an age/marks relaxation may apply without specifying a category.
+#     """
 
-    __tablename__ = "career_eligibility_profiles"
+#     __tablename__ = "career_eligibility_profiles"
 
-    id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(
-        String,
-        ForeignKey("students.student_id"),
-        nullable=False,
-        unique=True,
-        index=True,
-    )
-    profile = Column(JSON, nullable=False, default=dict)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+#     id = Column(Integer, primary_key=True, index=True)
+#     student_id = Column(
+#         String,
+#         ForeignKey("students.student_id"),
+#         nullable=False,
+#         unique=True,
+#         index=True,
+#     )
+#     profile = Column(JSON, nullable=False, default=dict)
+#     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 # Re-run after all model classes are registered so new tables are created.
