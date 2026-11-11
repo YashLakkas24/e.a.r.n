@@ -145,11 +145,6 @@ function StudentDashboard() {
       label: "Career Paths",
       icon: Map,
     },
-    {
-      id: "roadmap",
-      label: "AI Roadmap",
-      icon: Compass,
-    },
   ];
 
   return (
@@ -190,11 +185,6 @@ function StudentDashboard() {
 
                   if (item.id === "skills") {
                     navigate("/student/career-paths");
-                    return;
-                  }
-
-                  if (item.id === "roadmap") {
-                    navigate("/student/roadmap");
                     return;
                   }
 
