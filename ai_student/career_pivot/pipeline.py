@@ -94,9 +94,7 @@ def discover_career_directions(
     ]
 
     # Add official entry portals deterministically; the model is not allowed
-    # to invent source URLs. Apply a final conservative guard before showing
-    # "NOT POSSIBLE": a hard negative decision needs the profile facts that
-    # materially affect the chosen route.
+    # to invent source URLs.
     for direction in direction_result.directions:
         if not direction.pathway_summary:
             direction.pathway_summary = (
