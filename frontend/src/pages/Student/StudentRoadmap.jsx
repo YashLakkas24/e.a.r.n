@@ -74,8 +74,6 @@ function StudentRoadmap() {
 
       if (
         (res.status === "completed" && res.has_analysis) ||
-        (res.status === "blocked" && res.has_analysis) ||
-        res.status === "profile_required" ||
         res.status === "path_not_found"
       ) {
         return res;
@@ -127,33 +125,10 @@ function StudentRoadmap() {
           selectedDirection ||
           (availableDirs.length > 0 ? availableDirs[0].name : null);
 
-        const selectedPath =
-          availableDirs.find((item) => item.name === targetDir) ||
-          (location.state?.careerPath?.name === targetDir
-            ? location.state.careerPath
-            : null);
-
-        // Do not generate a seemingly actionable roadmap for a path explicitly
-        // flagged as blocked by the eligibility triage.
-        if (selectedPath?.eligibility_status === "not_possible") {
-          if (isMounted) {
-            setSelectedDirection(targetDir);
-            setRoadmapData({
-              direction: targetDir,
-              roadmap: [],
-              blocked_path: true,
-              transition_reason: selectedPath.eligibility_reason || "",
-            });
-          }
-          return;
-        }
 
         const res = await waitForRoadmap(targetDir);
 
-        if (
-          res.status === "profile_required" ||
-          res.status === "path_not_found"
-        ) {
+        if (res.status === "path_not_found") {
           navigate("/student/career-paths", { replace: true });
           return;
         }
@@ -197,16 +172,6 @@ function StudentRoadmap() {
       setSelectedDirection(dirName);
       setLoading(true);
       setError("");
-      const selectedPath = directions.find((item) => item.name === dirName);
-      if (selectedPath?.eligibility_status === "not_possible") {
-        setRoadmapData({
-          direction: dirName,
-          roadmap: [],
-          blocked_path: true,
-          transition_reason: selectedPath.eligibility_reason || "",
-        });
-        return;
-      }
       const res = await waitForRoadmap(dirName);
       if (res.has_analysis) {
         setRoadmapData(res);
@@ -341,9 +306,6 @@ function StudentRoadmap() {
     location.state?.careerPath ||
     roadmapData?.career_path ||
     null;
-  const isBlockedPath =
-    roadmapData?.blocked_path ||
-    selectedCareerPath?.eligibility_status === "not_possible";
   const diffCfg =
     DIFFICULTY_CONFIG[roadmapData?.transition_difficulty] ||
     DIFFICULTY_CONFIG.moderate;
@@ -367,19 +329,11 @@ function StudentRoadmap() {
         <button
           className="roadmap-refresh-btn"
           onClick={handleRefresh}
-          title={
-            isBlockedPath
-              ? "This path is flagged as not possible under the supplied profile. Review the eligibility details and official source links."
-              : "Rebuild the career-entry roadmap from the selected role and saved eligibility profile"
-          }
-          disabled={refreshing || isBlockedPath}
+          title="Regenerate the career-entry roadmap from the selected role and skill-gap analysis"
+          disabled={refreshing}
         >
           <RotateCcw size={14} className={refreshing ? "spin-icon" : ""} />
-          {isBlockedPath
-            ? "Eligibility blocked"
-            : refreshing
-              ? "Synthesizing..."
-              : "Regenerate Path"}
+          {refreshing ? "Synthesizing..." : "Regenerate Path"}
         </button>
       </header>
 
@@ -433,46 +387,30 @@ function StudentRoadmap() {
               <span className="summary-label">SELECTED CAREER PATH</span>
               <h2>{roadmapData?.direction}</h2>
               <div className="difficulty-badge-wrap">
-                {isBlockedPath ? (
-                  <span className="pathway-blocked-badge">
-                    <AlertTriangle size={13} /> NOT POSSIBLE
-                  </span>
-                ) : roadmapData?.transition_difficulty ? (
+                {roadmapData?.transition_difficulty ? (
                   <span className={`diff-pill ${diffCfg.badgeClass}`}>
                     {diffCfg.label}
                   </span>
                 ) : null}
                 <span className="milestones-count">
-                  {isBlockedPath
-                    ? "Eligibility barrier identified"
-                    : `${steps.length} Entry Steps`}
+                  {`${steps.length} Entry Steps`}
                 </span>
               </div>
             </div>
           </div>
 
           <div className="summary-actions">
-            {isBlockedPath ? (
-              <button
-                className="action-btn secondary"
-                onClick={() => navigate("/student/career-paths")}
-              >
-                <Compass size={16} />
-                Explore other pathways
-              </button>
-            ) : (
-              <button
-                className="action-btn secondary"
-                onClick={() =>
-                  navigate("/student/skills", {
-                    state: { direction: roadmapData?.direction },
-                  })
-                }
-              >
-                <Puzzle size={16} />
-                Review Skill Gaps
-              </button>
-            )}
+            <button
+              className="action-btn secondary"
+              onClick={() =>
+                navigate("/student/skills", {
+                  state: { direction: roadmapData?.direction },
+                })
+              }
+            >
+              <Puzzle size={16} />
+              Review Skill Gaps
+            </button>
           </div>
 
           {selectedCareerPath?.pathway_summary && (
@@ -482,21 +420,6 @@ function StudentRoadmap() {
             </div>
           )}
 
-          {selectedCareerPath?.eligibility_reason && (
-            <div
-              className={`roadmap-eligibility-reason ${isBlockedPath ? "blocked" : ""}`}
-            >
-              {isBlockedPath && <AlertTriangle size={17} />}
-              <div>
-                <strong>
-                  {isBlockedPath
-                    ? "Why this route is flagged"
-                    : "Eligibility assessment"}
-                </strong>
-                <p>{selectedCareerPath.eligibility_reason}</p>
-              </div>
-            </div>
-          )}
 
           {Array.isArray(selectedCareerPath?.official_resources) &&
             selectedCareerPath.official_resources.length > 0 && (
@@ -526,48 +449,7 @@ function StudentRoadmap() {
         </section>
 
         {/* Career entry route */}
-        {isBlockedPath ? (
-          <section className="blocked-path-panel">
-            <div className="blocked-path-heading">
-              <AlertTriangle size={23} />
-              <div>
-                <h2>This path is not currently recommended</h2>
-                <p>
-                  E.A.R.N. found a possible hard eligibility barrier from the
-                  supplied profile. Check the official source above before
-                  making a final decision; do not spend time on exam preparation
-                  until this barrier is clarified.
-                </p>
-              </div>
-            </div>
-            <h3>Explore these alternatives first</h3>
-            <div className="roadmap-alternative-list">
-              {directions
-                .filter(
-                  (item) =>
-                    item.name !== roadmapData?.direction &&
-                    item.eligibility_status !== "not_possible",
-                )
-                .slice(0, 3)
-                .map((item) => (
-                  <button
-                    key={item.name}
-                    type="button"
-                    onClick={() => handleSelectDirection(item.name)}
-                  >
-                    <span>
-                      <strong>{item.name}</strong>
-                      <small>
-                        {item.eligibility_reason || item.pathway_summary}
-                      </small>
-                    </span>
-                    <ArrowRight size={16} />
-                  </button>
-                ))}
-            </div>
-          </section>
-        ) : (
-          <section className="timeline-section">
+        <section className="timeline-section">
             <div className="timeline-header">
               <div className="timeline-icon">
                 <Milestone size={20} />
@@ -662,7 +544,6 @@ function StudentRoadmap() {
               })}
             </div>
           </section>
-        )}
 
         {/* Footer Navigation */}
         <section className="roadmap-footer-banner">
