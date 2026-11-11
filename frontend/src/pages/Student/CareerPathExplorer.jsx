@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
@@ -16,16 +16,10 @@ import {
   GraduationCap,
   Map,
   RefreshCw,
-  Save,
   Sparkles,
   Target,
 } from "lucide-react";
-import {
-  getStudentCareerDirections,
-  getStudentCareerEligibilityProfile,
-  getStudentInterestAnalysis,
-  saveStudentCareerEligibilityProfile,
-} from "../../services/studentService";
+import { getStudentCareerDirections } from "../../services/studentService";
 import "./CareerPathExplorer.css";
 
 function getStudentId() {
@@ -36,21 +30,6 @@ function getStudentId() {
     return "";
   }
 }
-
-const DEFAULT_PROFILE = {
-  age: "",
-  highest_qualification: "unknown",
-  education_status: "unknown",
-  field_of_study: "",
-  current_study_year: "",
-  expected_graduation_year: "",
-  state_or_ut: "",
-  citizenship_status: "unknown",
-  age_or_marks_relaxation: "unknown",
-  willing_to_pursue_further_study: true,
-  willing_to_prepare_for_competitive_exams: true,
-  preferred_entry_timeline: "unknown",
-};
 
 const ELIGIBILITY_META = {
   possible_now: {
@@ -72,10 +51,10 @@ const ELIGIBILITY_META = {
     detail: "This route appears to require further education, certification, or another prerequisite before entry.",
   },
   needs_more_information: {
-    label: "Needs more information",
+    label: "Eligibility not assessed",
     className: "eligibility-needs-information",
     Icon: CircleHelp,
-    detail: "E.A.R.N. cannot assess this route confidently until more profile details or official requirements are verified.",
+    detail: "Career relevance is based on your Interest+ profile. Personal entry eligibility must be checked against the current official requirements.",
   },
   not_possible: {
     label: "NOT POSSIBLE",
@@ -159,50 +138,15 @@ function CareerPathExplorer() {
 
   const [interest, setInterest] = useState("");
   const [directions, setDirections] = useState([]);
-  const [profile, setProfile] = useState(null);
-  const [profileDraft, setProfileDraft] = useState(DEFAULT_PROFILE);
-  const [showProfileForm, setShowProfileForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [savingProfile, setSavingProfile] = useState(false);
   const [error, setError] = useState("");
   const [needsInterest, setNeedsInterest] = useState(false);
-  const [activeFilter, setActiveFilter] = useState("all");
-
-  const counts = useMemo(() => ({
-    possibleNow: directions.filter((item) => item.eligibility_status === "possible_now").length,
-    later: directions.filter((item) =>
-      ["possible_after_graduation", "additional_qualification_required"].includes(item.eligibility_status),
-    ).length,
-    needsInfo: directions.filter((item) => item.eligibility_status === "needs_more_information").length,
-    notPossible: directions.filter((item) => item.eligibility_status === "not_possible").length,
-  }), [directions]);
-
-  const visibleDirections = useMemo(() => {
-    if (activeFilter === "all") return directions;
-    return directions.filter((item) => item.eligibility_status === activeFilter);
-  }, [directions, activeFilter]);
-
-  const loadDirections = async (forceRefresh = false) => {
-    const result = await getStudentCareerDirections(studentId, forceRefresh);
-    if (!result.has_analysis) {
-      setNeedsInterest(true);
-      setDirections([]);
-      setInterest(result.interest || "");
-      setError(result.message || "Complete Interest+ first to discover career pathways.");
-      return;
-    }
-
-    setNeedsInterest(false);
-    setError("");
-    setInterest(result.interest || "");
-    setDirections(normalizeDirections(result.directions));
-  };
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadInitialData() {
+    async function loadCareerPaths() {
       if (!studentId) {
         setError("Student information is missing. Please sign in again.");
         setLoading(false);
@@ -211,102 +155,63 @@ function CareerPathExplorer() {
 
       setLoading(true);
       setError("");
-      try {
-        // Load the interest label independently so the eligibility form still
-        // tells the student which Interest+ result is being used.
-        try {
-          const interestResult = await getStudentInterestAnalysis(studentId);
-          if (cancelled) return;
-          if (interestResult.has_analysis && interestResult.analyses?.length) {
-            setInterest(interestResult.analyses[0].interest || "");
-          }
-        } catch {
-          // Interest label is supplementary; eligibility/profile loading can continue.
-        }
 
-        const profileResult = await getStudentCareerEligibilityProfile(studentId);
+      try {
+        // Career discovery starts directly from the completed Interest+ analysis.
+        // Personal age, location, citizenship, and qualification details are
+        // deliberately not requested on this page.
+        const result = await getStudentCareerDirections(studentId, false);
         if (cancelled) return;
 
-        if (profileResult.has_profile && profileResult.profile) {
-          const saved = { ...DEFAULT_PROFILE, ...profileResult.profile };
-          setProfile(saved);
-          setProfileDraft(saved);
-          setShowProfileForm(false);
-
-          const careerResult = await getStudentCareerDirections(studentId, false);
-          if (cancelled) return;
-          if (!careerResult.has_analysis) {
-            setNeedsInterest(true);
-            setDirections([]);
-            setError(careerResult.message || "Complete Interest+ first.");
-          } else {
-            setNeedsInterest(false);
-            setError("");
-            setInterest(careerResult.interest || "");
-            setDirections(normalizeDirections(careerResult.directions));
-          }
-        } else {
-          setProfile(null);
-          setProfileDraft(DEFAULT_PROFILE);
-          setShowProfileForm(true);
-          // Do not rank careers before the student has had a chance to provide
-          // eligibility information.
+        if (!result.has_analysis) {
+          setNeedsInterest(true);
           setDirections([]);
+          setInterest(result.interest || "");
+          setError(result.message || "Complete Interest+ first to discover career pathways.");
+          return;
         }
+
+        setNeedsInterest(false);
+        setInterest(result.interest || "");
+        setDirections(normalizeDirections(result.directions));
       } catch (err) {
         if (!cancelled) {
-          setError(err.message || "Could not load your career profile.");
+          setError(err.message || "Could not load career path recommendations.");
         }
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
-    loadInitialData();
+    loadCareerPaths();
     return () => {
       cancelled = true;
     };
   }, [studentId]);
 
-  const updateDraft = (key, value) => {
-    setProfileDraft((current) => ({ ...current, [key]: value }));
-  };
-
-  const handleSaveProfile = async (event) => {
-    event.preventDefault();
-    setSavingProfile(true);
-    setError("");
-
-    const payload = {
-      ...profileDraft,
-      age: profileDraft.age === "" ? null : Number(profileDraft.age),
-      current_study_year: profileDraft.current_study_year === ""
-        ? null
-        : Number(profileDraft.current_study_year),
-      expected_graduation_year: profileDraft.expected_graduation_year === ""
-        ? null
-        : Number(profileDraft.expected_graduation_year),
-    };
-
-    try {
-      const saved = await saveStudentCareerEligibilityProfile(studentId, payload);
-      const normalized = { ...DEFAULT_PROFILE, ...(saved.profile || payload) };
-      setProfile(normalized);
-      setProfileDraft(normalized);
-      setShowProfileForm(false);
-      await loadDirections(false);
-    } catch (err) {
-      setError(err.message || "Could not save your eligibility profile.");
-    } finally {
-      setSavingProfile(false);
-    }
-  };
-
   const handleRefresh = async () => {
+    if (!studentId) {
+      setError("Student information is missing. Please sign in again.");
+      return;
+    }
+
     setRefreshing(true);
     setError("");
+
     try {
-      await loadDirections(true);
+      const result = await getStudentCareerDirections(studentId, true);
+
+      if (!result.has_analysis) {
+        setNeedsInterest(true);
+        setDirections([]);
+        setInterest(result.interest || "");
+        setError(result.message || "Complete Interest+ first to discover career pathways.");
+        return;
+      }
+
+      setNeedsInterest(false);
+      setInterest(result.interest || "");
+      setDirections(normalizeDirections(result.directions));
     } catch (err) {
       setError(err.message || "Could not refresh career recommendations.");
     } finally {
@@ -340,8 +245,8 @@ function CareerPathExplorer() {
         <main className="career-explorer-main">
           <section className="career-explorer-loading">
             <div className="career-explorer-spinner" />
-            <h2>Assessing your career entry routes...</h2>
-            <p>We are using your interest profile and any eligibility details you supplied to compare realistic pathways.</p>
+            <h2>Finding career paths related to your interests...</h2>
+            <p>We are using your Interest+ answers and assessed capabilities to identify roles worth exploring.</p>
           </section>
         </main>
       </div>
@@ -363,22 +268,23 @@ function CareerPathExplorer() {
           className="career-explorer-refresh"
           type="button"
           onClick={handleRefresh}
-          disabled={refreshing || !profile}
-          title="Reassess career pathways using your saved profile"
+          disabled={refreshing}
+          title="Refresh career recommendations from your Interest+ analysis"
         >
           <RefreshCw size={14} className={refreshing ? "career-spin" : ""} />
-          {refreshing ? "Reassessing..." : "Refresh paths"}
+          {refreshing ? "Refreshing..." : "Refresh paths"}
         </button>
       </header>
 
       <main className="career-explorer-main">
         <section className="career-explorer-intro">
           <span className="career-explorer-eyebrow">INTEREST → REALISTIC CAREER OPTIONS → ENTRY ROUTE</span>
-          <h1>Which careers can you realistically pursue?</h1>
+          <h1>Explore careers connected to your interests.</h1>
           <p>
-            E.A.R.N. ranks relevant roles by preliminary eligibility and interest
-            fit. Each selected path opens a practical sequence of qualifications,
-            exams or admissions, applications, and skill development.
+            E.A.R.N. uses your Interest+ answers and existing skill evidence to
+            recommend relevant roles. Open a path to explore its qualifications,
+            exams or admissions, recruitment stages, and learning roadmap.
+            Personal eligibility is not assessed on this page.
           </p>
         </section>
 
@@ -409,253 +315,37 @@ function CareerPathExplorer() {
           </div>
         )}
 
-        {showProfileForm ? (
-          <section className="eligibility-profile-panel">
-            <div className="eligibility-panel-heading">
-              <div className="career-path-icon"><GraduationCap size={22} /></div>
-              <div>
-                <span className="career-explorer-eyebrow">STEP 1 · YOUR CURRENT SITUATION</span>
-                <h2>Check which pathways are realistic for you</h2>
-                <p>
-                  These details help distinguish possible-now routes, routes that
-                  require graduation or further study, and routes that need more
-                  information. Unknown details will not be treated as failures.
-                </p>
-              </div>
-            </div>
+        <section className="career-eligibility-notice">
+          <div className="career-eligibility-notice-icon">
+            <CircleHelp size={19} />
+          </div>
+          <div>
+            <strong>Personal eligibility is not assessed here</strong>
+            <p>
+              Career options are ranked using your interests and existing evidence.
+              Age limits, qualifications, citizenship, location-specific rules, and
+              current application conditions must be verified in the relevant
+              official notification. Missing details do not mean a career is impossible.
+            </p>
+          </div>
+        </section>
 
-            <form className="eligibility-profile-form" onSubmit={handleSaveProfile}>
-              <div className="eligibility-form-grid">
-                <label>
-                  Age
-                  <input
-                    type="number"
-                    min="14"
-                    max="100"
-                    value={profileDraft.age ?? ""}
-                    onChange={(event) => updateDraft("age", event.target.value)}
-                    placeholder="e.g. 20"
-                  />
-                  <small>Leave blank if you prefer; some exam rules depend on age.</small>
-                </label>
-
-                <label>
-                  Highest qualification completed
-                  <select
-                    value={profileDraft.highest_qualification}
-                    onChange={(event) => updateDraft("highest_qualification", event.target.value)}
-                  >
-                    <option value="unknown">Not specified</option>
-                    <option value="below_10th">Below Class 10</option>
-                    <option value="10th">Class 10</option>
-                    <option value="12th">Class 12</option>
-                    <option value="diploma">Diploma</option>
-                    <option value="undergraduate">Bachelor's degree</option>
-                    <option value="postgraduate">Postgraduate degree</option>
-                    <option value="other">Other qualification</option>
-                  </select>
-                </label>
-
-                <label>
-                  Current study status
-                  <select
-                    value={profileDraft.education_status}
-                    onChange={(event) => updateDraft("education_status", event.target.value)}
-                  >
-                    <option value="unknown">Not specified</option>
-                    <option value="studying">Currently studying</option>
-                    <option value="completed">Completed current qualification</option>
-                    <option value="not_studying">Not currently studying</option>
-                  </select>
-                </label>
-
-                <label>
-                  Course / field of study
-                  <input
-                    type="text"
-                    maxLength="160"
-                    value={profileDraft.field_of_study || ""}
-                    onChange={(event) => updateDraft("field_of_study", event.target.value)}
-                    placeholder="e.g. B.E. Artificial Intelligence"
-                  />
-                </label>
-
-                <label>
-                  Current year of study
-                  <select
-                    value={profileDraft.current_study_year ?? ""}
-                    onChange={(event) => updateDraft("current_study_year", event.target.value)}
-                  >
-                    <option value="">Not specified</option>
-                    {[1, 2, 3, 4, 5, 6].map((year) => (
-                      <option key={year} value={year}>{year}{year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th"} year</option>
-                    ))}
-                  </select>
-                </label>
-
-                <label>
-                  Expected graduation year
-                  <input
-                    type="number"
-                    min="2020"
-                    max="2045"
-                    value={profileDraft.expected_graduation_year ?? ""}
-                    onChange={(event) => updateDraft("expected_graduation_year", event.target.value)}
-                    placeholder="e.g. 2027"
-                  />
-                </label>
-
-                <label>
-                  Preferred state / region
-                  <input
-                    type="text"
-                    maxLength="100"
-                    value={profileDraft.state_or_ut || ""}
-                    onChange={(event) => updateDraft("state_or_ut", event.target.value)}
-                    placeholder="e.g. Maharashtra or All India"
-                  />
-                </label>
-
-                <label>
-                  Citizenship status
-                  <select
-                    value={profileDraft.citizenship_status}
-                    onChange={(event) => updateDraft("citizenship_status", event.target.value)}
-                  >
-                    <option value="unknown">Not specified</option>
-                    <option value="indian_citizen">Indian citizen</option>
-                    <option value="other_citizenship">Other / not an Indian citizen</option>
-                  </select>
-                </label>
-
-                <label>
-                  May an age or marks relaxation apply?
-                  <select
-                    value={profileDraft.age_or_marks_relaxation}
-                    onChange={(event) => updateDraft("age_or_marks_relaxation", event.target.value)}
-                  >
-                    <option value="unknown">Not sure / prefer not to say</option>
-                    <option value="yes">Possibly yes</option>
-                    <option value="no">No</option>
-                  </select>
-                  <small>No personal category is requested. If relaxation could affect eligibility, the result may need verification.</small>
-                </label>
-
-                <label>
-                  When would you prefer to enter this career?
-                  <select
-                    value={profileDraft.preferred_entry_timeline}
-                    onChange={(event) => updateDraft("preferred_entry_timeline", event.target.value)}
-                  >
-                    <option value="unknown">Not specified</option>
-                    <option value="as_soon_as_eligible">As soon as eligible</option>
-                    <option value="after_graduation">After graduation</option>
-                    <option value="within_3_years">Within 3 years</option>
-                    <option value="flexible">Flexible timeline</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="eligibility-preferences">
-                <label className="eligibility-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(profileDraft.willing_to_pursue_further_study)}
-                    onChange={(event) => updateDraft("willing_to_pursue_further_study", event.target.checked)}
-                  />
-                  <span>I'm open to further study or professional qualifications.</span>
-                </label>
-                <label className="eligibility-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(profileDraft.willing_to_prepare_for_competitive_exams)}
-                    onChange={(event) => updateDraft("willing_to_prepare_for_competitive_exams", event.target.checked)}
-                  />
-                  <span>I'm open to preparing for competitive recruitment exams.</span>
-                </label>
-              </div>
-
-              <div className="eligibility-profile-actions">
-                <button className="career-explorer-primary" type="submit" disabled={savingProfile}>
-                  <Save size={16} />
-                  {savingProfile ? "Assessing..." : "Save profile & rank pathways"}
-                  <ArrowRight size={16} />
-                </button>
-                {profile && (
-                  <button className="career-explorer-secondary" type="button" onClick={() => {
-                    setProfileDraft(profile);
-                    setShowProfileForm(false);
-                  }}>
-                    Cancel
-                  </button>
-                )}
-              </div>
-
-              <p className="eligibility-disclaimer">
-                Eligibility results are preliminary guidance, not an official
-                decision. Current notifications and programme rules take
-                precedence. E.A.R.N. will show “Needs more information” rather
-                than “NOT POSSIBLE” when a required fact is missing.
-              </p>
-            </form>
-          </section>
-        ) : profile && (
-          <section className="career-profile-summary">
-            <div>
-              <span className="career-explorer-eyebrow">ELIGIBILITY PROFILE SAVED</span>
-              <strong>
-                {profile.highest_qualification === "unknown"
-                  ? "Qualification not specified"
-                  : profile.highest_qualification.replaceAll("_", " ")}
-                {profile.education_status === "studying" ? " · currently studying" : ""}
-                {profile.age ? ` · age ${profile.age}` : ""}
-              </strong>
-              <p>Career paths are ranked using these details. Update them if your situation changes.</p>
-            </div>
-            <button className="career-explorer-secondary" type="button" onClick={() => setShowProfileForm(true)}>
-              Update profile
-            </button>
-          </section>
-        )}
-
-        {!showProfileForm && profile && !needsInterest && directions.length > 0 && (
+        {!needsInterest && directions.length > 0 && (
           <section className="career-paths-section">
             <div className="career-paths-heading">
               <div>
-                <span className="career-explorer-eyebrow">PRIORITIZED PATHWAYS</span>
-                <h2>Choose a realistic route</h2>
+                <span className="career-explorer-eyebrow">MATCHED CAREER PATHS</span>
+                <h2>Career options related to your interest</h2>
                 <p>
-                  Paths likely to be actionable now appear first; paths requiring
-                  more qualification or verification follow. A hard eligibility
-                  barrier is shown last.
+                  Paths are ordered by their relevance to your Interest+ profile.
+                  Check the official entry requirements before deciding which route to pursue.
                 </p>
               </div>
               <span className="career-path-count">{directions.length} paths</span>
             </div>
 
-            <div className="pathway-count-strip">
-              <button type="button" className={activeFilter === "all" ? "active" : ""} onClick={() => setActiveFilter("all")}>
-                All <strong>{directions.length}</strong>
-              </button>
-              <button type="button" className={activeFilter === "possible_now" ? "active" : ""} onClick={() => setActiveFilter("possible_now")}>
-                Possible now <strong>{counts.possibleNow}</strong>
-              </button>
-              <button type="button" className={activeFilter === "possible_after_graduation" ? "active" : ""} onClick={() => setActiveFilter("possible_after_graduation")}>
-                After graduation <strong>{directions.filter((item) => item.eligibility_status === "possible_after_graduation").length}</strong>
-              </button>
-              <button type="button" className={activeFilter === "additional_qualification_required" ? "active" : ""} onClick={() => setActiveFilter("additional_qualification_required")}>
-                Further study <strong>{directions.filter((item) => item.eligibility_status === "additional_qualification_required").length}</strong>
-              </button>
-              <button type="button" className={activeFilter === "needs_more_information" ? "active" : ""} onClick={() => setActiveFilter("needs_more_information")}>
-                Needs info <strong>{counts.needsInfo}</strong>
-              </button>
-              <button type="button" className={activeFilter === "not_possible" ? "active" : ""} onClick={() => setActiveFilter("not_possible")}>
-                Not possible <strong>{counts.notPossible}</strong>
-              </button>
-            </div>
-
             <div className="career-path-grid">
-              {visibleDirections.map((direction, index) => {
+              {directions.map((direction, index) => {
                 const Icon = getPathIcon(direction.name);
                 const score = direction.fit_score == null
                   ? null
@@ -744,16 +434,10 @@ function CareerPathExplorer() {
               })}
             </div>
 
-            {visibleDirections.length === 0 && (
-              <div className="career-explorer-empty">
-                <h3>No pathways in this category</h3>
-                <p>Try another eligibility filter.</p>
-              </div>
-            )}
           </section>
         )}
 
-        {!showProfileForm && profile && directions.length === 0 && !needsInterest && !error && (
+        {directions.length === 0 && !needsInterest && !error && (
           <section className="career-explorer-empty">
             <div className="career-path-icon"><Map size={22} /></div>
             <h3>No career paths available yet</h3>
@@ -767,12 +451,11 @@ function CareerPathExplorer() {
         <aside className="career-explorer-note">
           <Sparkles size={18} aria-hidden="true" />
           <p>
-            <strong>Important:</strong> these are ranked career options, not a
-            guarantee of selection. “NOT POSSIBLE” should only appear for a
-            documented hard barrier. The linked official portals help you check
-            current notices; this screen does not claim that a vacancy or
-            application window is currently open. Verify eligibility against the
-            relevant official notification or admissions page before deciding.
+            <strong>Important:</strong> these options reflect interest relevance,
+            not confirmed personal eligibility or a guarantee of selection. This
+            page does not collect age, qualification, citizenship, or state details.
+            Verify the exact requirements and current application dates in the
+            relevant official recruitment or admissions notification.
           </p>
         </aside>
       </main>
