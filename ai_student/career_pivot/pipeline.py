@@ -60,20 +60,6 @@ def discover_career_directions(
         student_profile=student_profile,
     )
 
-<<<<<<< HEAD
-    feasibility_priority = {
-        "feasible": 0,
-        "needs_preparation": 1,
-        "eligibility_unconfirmed": 2,
-        "not_possible": 3,
-    }
-    direction_result.directions.sort(
-        key=lambda direction: (
-            feasibility_priority[direction.feasibility_status],
-            -direction.fit_score,
-        )
-    )
-=======
     # Prompts alone are not a reliable guard against activity-like output. Reject
     # titles that are not recognizable occupational roles and retry once for
     # replacements. Keep any valid first-pass roles; never relabel an activity
@@ -156,7 +142,6 @@ def discover_career_directions(
     # This prevents accidentally processing more than 5.
     # ========================================================
 
->>>>>>> f0ef4b1114a01c46c857e86892a3e74ee8c95de7
     direction_result.directions = direction_result.directions[:5]
 
     print("\nDISCOVERED DIRECTIONS:")
@@ -277,12 +262,8 @@ def generate_roadmap_for_skill_analysis(
     skill_analysis: CareerSkillGapAnalysis,
     existing_skills: list[str] | None = None,
     previous_interests: list[str] | None = None,
-<<<<<<< HEAD
-    student_profile: dict[str, Any] | None = None,
-=======
     student_profile: dict | None = None,
     career_path: dict | None = None,
->>>>>>> f0ef4b1114a01c46c857e86892a3e74ee8c95de7
 ) -> TransitionRoadmapResult:
     """Generate the career-entry roadmap separately, on demand."""
     existing_skills = existing_skills or []
@@ -304,11 +285,8 @@ def generate_roadmap_for_skill_analysis(
         transferable_skills=skill_analysis.transferable_skills,
         skill_gaps=skill_analysis.skill_gaps,
         student_profile=student_profile,
-<<<<<<< HEAD
-=======
         official_resources=official_resources,
         career_path=career_path,
->>>>>>> f0ef4b1114a01c46c857e86892a3e74ee8c95de7
     )
     print(
         f"[CAREER PIVOT TIMING] Roadmap generation completed in "

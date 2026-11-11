@@ -65,15 +65,6 @@ class Direction(BaseModel):
     name: str
     fit_score: int = Field(ge=0, le=100)
     reason: str
-<<<<<<< HEAD
-    feasibility_status: Literal[
-        "feasible",
-        "needs_preparation",
-        "eligibility_unconfirmed",
-        "not_possible",
-    ] = "eligibility_unconfirmed"
-    feasibility_reason: str = ""
-=======
     # Increment when path discovery semantics change so cached activity-like
     # recommendations are regenerated instead of silently reused.
     pathway_version: Literal["career_role_routes_v3"] = "career_role_routes_v3"
@@ -83,7 +74,6 @@ class Direction(BaseModel):
     eligibility_reason: str = ""
     missing_information: list[str] = Field(default_factory=list)
     official_resources: list[CareerResource] = Field(default_factory=list)
->>>>>>> f0ef4b1114a01c46c857e86892a3e74ee8c95de7
 
 class DirectionDiscoveryResult(BaseModel):
     directions: list[Direction]
@@ -159,23 +149,11 @@ class RoadmapStep(BaseModel):
     title: str
     description: str
     skills: list[str]
-<<<<<<< HEAD
-    step_type: Literal[
-        "eligibility",
-        "qualification",
-        "admission",
-        "exam",
-        "learning",
-        "experience",
-        "application",
-    ] = "learning"
-=======
     route_type: RoadmapStepType = "skill_development"
     estimated_duration: str = ""
     completion_evidence: str = ""
     official_resource_label: str = ""
     official_resource_url: str = ""
->>>>>>> f0ef4b1114a01c46c857e86892a3e74ee8c95de7
 
 class TransitionRoadmapResult(BaseModel):
     transition_difficulty: Literal[
