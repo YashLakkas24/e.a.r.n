@@ -12,12 +12,8 @@ import re
 CAREER_PATH_VERSION = "career_role_routes_v4"
 
 
-def get_official_resources_for_direction(
-    direction_name: str,
-    state_or_ut: str | None = None,
-) -> list[dict[str, str]]:
+def get_official_resources_for_direction(direction_name: str) -> list[dict[str, str]]:
     name = (direction_name or "").strip().lower()
-    state = (state_or_ut or "").strip().lower()
     resources: list[dict[str, str]] = []
 
     def add(label: str, url: str, description: str) -> None:
@@ -113,7 +109,7 @@ def get_official_resources_for_direction(
             "state psc",
         )
     ):
-        if "maharashtra" in state or "maharashtra" in name or "mpsc" in name:
+        if "maharashtra" in name or "mpsc" in name:
             add(
                 "Maharashtra Public Service Commission — Official Notices",
                 "https://mpsc.gov.in/announcement_and_circular/true",
