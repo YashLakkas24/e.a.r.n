@@ -1056,89 +1056,84 @@ def save_career_eligibility_profile(
 
 
 @router.get("/{student_id}/career-eligibility")
-def get_career_eligibility_profile(
+def get_legacy_career_eligibility_profile(
     student_id: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_student),
 ):
+    """Backward-compatible alias for the JSON-backed eligibility profile."""
     verify_student_access(student_id, current_user)
 
-    profile = (
+    record = (
         db.query(CareerEligibilityProfile)
         .filter(CareerEligibilityProfile.student_id == student_id)
         .first()
     )
-    if not profile:
-        return {"has_profile": False, "profile": None}
-
+    profile = record.profile if record and isinstance(record.profile, dict) else {}
     return {
-        "has_profile": True,
-        "profile": {
-            "age": profile.age,
-            "highest_qualification": profile.highest_qualification,
-            "study_stream": profile.study_stream,
-            "citizenship": profile.citizenship,
-            "state": profile.state,
-        },
+        "has_profile": bool(profile),
+        "profile": profile,
+        "updated_at": (
+            record.updated_at.isoformat() if record and record.updated_at else None
+        ),
     }
 
 
 @router.put("/{student_id}/career-eligibility")
-def save_career_eligibility_profile(
+def save_legacy_career_eligibility_profile(
     student_id: str,
-    profile_data: CareerEligibilityRequest,
+    profile_data: CareerEligibilityProfilePayload,
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_student),
 ):
+    """Backward-compatible alias using the current profile payload/schema."""
     verify_student_access(student_id, current_user)
 
     student = db.query(Student).filter(Student.student_id == student_id).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    profile = (
+    profile = profile_data.model_dump()
+    record = (
         db.query(CareerEligibilityProfile)
         .filter(CareerEligibilityProfile.student_id == student_id)
         .first()
     )
-    if not profile:
-        profile = CareerEligibilityProfile(student_id=student_id)
-        db.add(profile)
+    if record:
+        record.profile = profile
+        record.updated_at = datetime.utcnow()
+    else:
+        record = CareerEligibilityProfile(student_id=student_id, profile=profile)
+        db.add(record)
 
-    profile.age = profile_data.age
-    profile.highest_qualification = profile_data.highest_qualification
-    profile.study_stream = profile_data.study_stream
-    profile.citizenship = profile_data.citizenship
-    profile.state = profile_data.state.strip()
+    # Match the canonical profile endpoint: regenerate career suggestions and
+    # the route stage when eligibility information changes.
+    latest_analysis = (
+        db.query(InterestAnalysis)
+        .filter(InterestAnalysis.student_id == student_id)
+        .order_by(InterestAnalysis.id.desc())
+        .first()
+    )
+    if latest_analysis:
+        latest_analysis.potential_directions = None
 
-    cached_analyses = (
+    pivot_records = (
         db.query(CareerPivotAnalysis)
         .filter(CareerPivotAnalysis.student_id == student_id)
         .all()
     )
-    for analysis in cached_analyses:
-        if _has_skill_gap_payload(analysis) and _career_analysis_status(
-            analysis
-        ) not in (
-            "processing",
-            "roadmap_processing",
-        ):
-            analysis.transition_difficulty = None
-            analysis.transition_reason = None
-            analysis.roadmap = None
+    for item in pivot_records:
+        item.transition_difficulty = None
+        item.transition_reason = "__ROADMAP_PENDING__"
+        item.roadmap = None
 
     db.commit()
-
+    db.refresh(record)
     return {
         "message": "Career eligibility profile saved.",
-        "has_profile": True,
-        "profile": {
-            "age": profile.age,
-            "highest_qualification": profile.highest_qualification,
-            "study_stream": profile.study_stream,
-            "citizenship": profile.citizenship,
-            "state": profile.state,
-        },
+        "has_profile": bool(record.profile),
+        "profile": record.profile or {},
+        "updated_at": record.updated_at.isoformat() if record.updated_at else None,
     }
 
 
@@ -1447,16 +1442,9 @@ def get_roadmap(
         else:
             target_direction = latest_analysis.interest
 
+    # Eligibility details are optional. The pathway prompt must classify
+    # unknown facts as needs_more_information rather than blocking roadmap access.
     eligibility_profile = analysis_dict.get("career_eligibility_profile") or {}
-    if not eligibility_profile:
-        return {
-            "has_analysis": False,
-            "status": "profile_required",
-            "student_id": student_id,
-            "direction": target_direction,
-            "detail": "Complete your career eligibility profile before generating an entry roadmap.",
-            "roadmap": [],
-        }
 
     saved_paths = parse_json_safely(latest_analysis.potential_directions) or []
     paths_are_eligibility_aware = bool(saved_paths) and all(
