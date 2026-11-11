@@ -1,8 +1,6 @@
 import json
-<<<<<<< HEAD
-=======
+
 from datetime import datetime
->>>>>>> f0ef4b1114a01c46c857e86892a3e74ee8c95de7
 from typing import Any, Literal
 
 from fastapi import (
@@ -96,52 +94,38 @@ class CareerDirectionAnalyzeRequest(BaseModel):
     force_refresh: bool = False
 
 
-<<<<<<< HEAD
-class CareerEligibilityRequest(BaseModel):
-    age: int = Field(ge=14, le=80)
-    highest_qualification: Literal[
-        "class_10_or_below",
-        "class_12",
-        "diploma",
-        "bachelors",
-        "masters",
-        "other",
-    ]
-    study_stream: Literal[
-        "science",
-        "commerce",
-        "arts_humanities",
-        "engineering_technical",
-        "other",
-        "not_sure",
-    ]
-    citizenship: Literal["indian", "other", "prefer_not_to_say"]
-    state: str = Field(default="", max_length=80)
-=======
 class CareerEligibilityProfilePayload(BaseModel):
     age: int | None = Field(default=None, ge=14, le=100)
     highest_qualification: Literal[
-        "below_10th", "10th", "12th", "diploma", "undergraduate",
-        "postgraduate", "other", "unknown"
+        "below_10th",
+        "10th",
+        "12th",
+        "diploma",
+        "undergraduate",
+        "postgraduate",
+        "other",
+        "unknown",
     ] = "unknown"
-    education_status: Literal[
-        "studying", "completed", "not_studying", "unknown"
-    ] = "unknown"
+    education_status: Literal["studying", "completed", "not_studying", "unknown"] = (
+        "unknown"
+    )
     field_of_study: str = Field(default="", max_length=160)
     current_study_year: int | None = Field(default=None, ge=1, le=12)
     expected_graduation_year: int | None = Field(default=None, ge=2020, le=2045)
     state_or_ut: str = Field(default="", max_length=100)
-    citizenship_status: Literal[
-        "indian_citizen", "other_citizenship", "unknown"
-    ] = "unknown"
+    citizenship_status: Literal["indian_citizen", "other_citizenship", "unknown"] = (
+        "unknown"
+    )
     age_or_marks_relaxation: Literal["yes", "no", "unknown"] = "unknown"
     willing_to_pursue_further_study: bool = True
     willing_to_prepare_for_competitive_exams: bool = True
     preferred_entry_timeline: Literal[
-        "as_soon_as_eligible", "after_graduation", "within_3_years",
-        "flexible", "unknown"
+        "as_soon_as_eligible",
+        "after_graduation",
+        "within_3_years",
+        "flexible",
+        "unknown",
     ] = "unknown"
->>>>>>> f0ef4b1114a01c46c857e86892a3e74ee8c95de7
 
 
 # ============================================================
@@ -690,18 +674,6 @@ def _get_student_context(
                 "branch": student_record.branch,
             }
 
-<<<<<<< HEAD
-        if eligibility_profile:
-            analysis_dict.setdefault("student_profile", {}).update(
-                {
-                    "age": eligibility_profile.age,
-                    "highest_qualification": eligibility_profile.highest_qualification,
-                    "study_stream": eligibility_profile.study_stream,
-                    "citizenship": eligibility_profile.citizenship,
-                    "state": eligibility_profile.state,
-                }
-            )
-=======
     eligibility_record = (
         db.query(CareerEligibilityProfile)
         .filter(CareerEligibilityProfile.student_id == student_id)
@@ -710,8 +682,6 @@ def _get_student_context(
     analysis_dict["career_eligibility_profile"] = (
         eligibility_record.profile if eligibility_record else {}
     )
->>>>>>> f0ef4b1114a01c46c857e86892a3e74ee8c95de7
-
     return (latest_analysis, analysis_dict, existing_skills, previous_interests)
 
 
@@ -914,7 +884,8 @@ def _run_roadmap_background(
         saved_paths = analysis_dict.get("potential_directions") or []
         selected_path = next(
             (
-                item for item in saved_paths
+                item
+                for item in saved_paths
                 if isinstance(item, dict) and item.get("name") == target_direction
             ),
             {},
@@ -931,7 +902,8 @@ def _run_roadmap_background(
                 "direction": cached.direction,
                 "required_skills": parse_json_safely(cached.required_skills) or [],
                 "skill_assessments": parse_json_safely(cached.skill_assessments) or [],
-                "transferable_skills": parse_json_safely(cached.transferable_skills) or [],
+                "transferable_skills": parse_json_safely(cached.transferable_skills)
+                or [],
                 "skill_gaps": parse_json_safely(cached.skill_gaps) or [],
             }
         )
@@ -941,21 +913,13 @@ def _run_roadmap_background(
             f"student={student_id} | direction={target_direction}",
             flush=True,
         )
-
+        
         roadmap_result = generate_roadmap_for_skill_analysis(
             skill_analysis=skill_analysis,
-<<<<<<< HEAD
-            existing_skills=[str(skill) for skill in existing_skills],
-            previous_interests=[
-                str(interest) for interest in previous_interests
-            ],
-            student_profile=analysis_dict.get("student_profile", {}),
-=======
             existing_skills=existing_skills,
             previous_interests=previous_interests,
             student_profile=eligibility_profile,
             career_path=selected_path,
->>>>>>> f0ef4b1114a01c46c857e86892a3e74ee8c95de7
         )
 
         cached.transition_difficulty = roadmap_result.transition_difficulty
@@ -994,9 +958,7 @@ def _run_roadmap_background(
                 # Preserve successful skill-gap results when only roadmap
                 # generation fails; a retry should not repeat core analysis.
                 cached.transition_difficulty = None
-                cached.transition_reason = (
-                    f"__ROADMAP_ERROR__:{type(e).__name__}: {e}"
-                )
+                cached.transition_reason = f"__ROADMAP_ERROR__:{type(e).__name__}: {e}"
                 cached.roadmap = None
                 db.commit()
         except Exception:
@@ -1025,7 +987,9 @@ def get_career_eligibility_profile(
     return {
         "has_profile": bool(record),
         "profile": record.profile if record else None,
-        "updated_at": record.updated_at.isoformat() if record and record.updated_at else None,
+        "updated_at": (
+            record.updated_at.isoformat() if record and record.updated_at else None
+        ),
     }
 
 
@@ -1153,7 +1117,9 @@ def save_career_eligibility_profile(
         .all()
     )
     for analysis in cached_analyses:
-        if _has_skill_gap_payload(analysis) and _career_analysis_status(analysis) not in (
+        if _has_skill_gap_payload(analysis) and _career_analysis_status(
+            analysis
+        ) not in (
             "processing",
             "roadmap_processing",
         ):
@@ -1348,9 +1314,14 @@ def get_skill_gap(
         )
 
     if not force_refresh or status == "roadmap_processing":
-        if status in ("completed", "skill_gap_ready", "roadmap_processing", "roadmap_error"):
-            roadmap, eligibility_status, eligibility_reason = (
-                _roadmap_cache_payload(cached.roadmap)
+        if status in (
+            "completed",
+            "skill_gap_ready",
+            "roadmap_processing",
+            "roadmap_error",
+        ):
+            roadmap, eligibility_status, eligibility_reason = _roadmap_cache_payload(
+                cached.roadmap
             )
             return {
                 "has_analysis": True,
@@ -1360,15 +1331,14 @@ def get_skill_gap(
                 "direction": cached.direction,
                 "required_skills": parse_json_safely(cached.required_skills) or [],
                 "skill_assessments": parse_json_safely(cached.skill_assessments) or [],
-                "transferable_skills": parse_json_safely(cached.transferable_skills) or [],
+                "transferable_skills": parse_json_safely(cached.transferable_skills)
+                or [],
                 "skill_gaps": parse_json_safely(cached.skill_gaps) or [],
                 "transition_difficulty": cached.transition_difficulty,
                 "transition_reason": (
                     _career_error_message(cached)
                     if status == "roadmap_error"
-                    else cached.transition_reason
-                    if status == "completed"
-                    else None
+                    else cached.transition_reason if status == "completed" else None
                 ),
                 "roadmap": roadmap,
                 "eligibility_status": eligibility_status,
@@ -1504,9 +1474,7 @@ def get_roadmap(
             interest_analysis=analysis_dict,
             student_profile=eligibility_profile,
         )
-        saved_paths = [
-            item.model_dump() for item in direction_result.directions
-        ]
+        saved_paths = [item.model_dump() for item in direction_result.directions]
         latest_analysis.potential_directions = json.dumps(saved_paths)
 
         # These paths may have been generated under an older activity-based
@@ -1532,7 +1500,8 @@ def get_roadmap(
 
     selected_path = next(
         (
-            item for item in saved_paths
+            item
+            for item in saved_paths
             if isinstance(item, dict) and item.get("name") == target_direction
         ),
         None,
@@ -1610,9 +1579,7 @@ def get_roadmap(
             },
         )
 
-    if status == "completed" and isinstance(
-        parse_json_safely(cached.roadmap), list
-    ):
+    if status == "completed" and isinstance(parse_json_safely(cached.roadmap), list):
         cached.transition_difficulty = None
         cached.transition_reason = "__ROADMAP_PROCESSING__"
         cached.roadmap = None
@@ -1635,8 +1602,8 @@ def get_roadmap(
 
     if not force_refresh:
         if status == "completed":
-            roadmap, eligibility_status, eligibility_reason = (
-                _roadmap_cache_payload(cached.roadmap)
+            roadmap, eligibility_status, eligibility_reason = _roadmap_cache_payload(
+                cached.roadmap
             )
             return {
                 "has_analysis": True,
