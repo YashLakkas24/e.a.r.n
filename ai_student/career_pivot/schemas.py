@@ -60,7 +60,7 @@ class Direction(BaseModel):
     reason: str
     # Increment when path discovery semantics change so cached activity-like
     # recommendations are regenerated instead of silently reused.
-    pathway_version: Literal["career_role_routes_v3"] = "career_role_routes_v3"
+    pathway_version: Literal["career_role_routes_v4"] = "career_role_routes_v4"
     pathway_type: PathwayType = "other"
     pathway_summary: str = ""
     official_resources: list[CareerResource] = Field(default_factory=list)

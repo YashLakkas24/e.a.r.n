@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 
 from fastapi import (
     APIRouter,
@@ -9,7 +9,7 @@ from fastapi import (
     HTTPException,
 )
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from database import SessionLocal
 
 from models import (
@@ -91,30 +91,6 @@ class CareerDirectionAnalyzeRequest(BaseModel):
     direction: str
     force_refresh: bool = False
 
-
-# class CareerEligibilityProfilePayload(BaseModel):
-#     age: int | None = Field(default=None, ge=14, le=100)
-#     highest_qualification: Literal[
-#         "below_10th", "10th", "12th", "diploma", "undergraduate",
-#         "postgraduate", "other", "unknown"
-#     ] = "unknown"
-#     education_status: Literal[
-#         "studying", "completed", "not_studying", "unknown"
-#     ] = "unknown"
-#     field_of_study: str = Field(default="", max_length=160)
-#     current_study_year: int | None = Field(default=None, ge=1, le=12)
-#     expected_graduation_year: int | None = Field(default=None, ge=2020, le=2045)
-#     state_or_ut: str = Field(default="", max_length=100)
-#     citizenship_status: Literal[
-#         "indian_citizen", "other_citizenship", "unknown"
-#     ] = "unknown"
-#     age_or_marks_relaxation: Literal["yes", "no", "unknown"] = "unknown"
-#     willing_to_pursue_further_study: bool = True
-#     willing_to_prepare_for_competitive_exams: bool = True
-#     preferred_entry_timeline: Literal[
-#         "as_soon_as_eligible", "after_graduation", "within_3_years",
-#         "flexible", "unknown"
-#     ] = "unknown"
 
 
 # ============================================================
@@ -638,19 +614,6 @@ def _get_student_context(student_id: str, db: Session):
             "summary": latest_analysis.summary or "",
         }
 
-        # Include verified profile info from student record
-        student_record = (
-            db.query(Student).filter(Student.student_id == student_id).first()
-        )
-
-        if student_record:
-
-            analysis_dict["student_profile"] = {
-                "name": student_record.name,
-                "attendance": student_record.attendance,
-                "previous_sem_cgpa": student_record.previous_sem_cgpa,
-                "extracurricular_count": (student_record.extracurricular_count),
-            }
 
     return (latest_analysis, analysis_dict, existing_skills, previous_interests)
 
@@ -837,7 +800,7 @@ def _run_roadmap_background(
         _, analysis_dict, existing_skills, previous_interests = _get_student_context(
             student_id, db
         )
-        eligibility_profile = analysis_dict.get("career_eligibility_profile") or {}
+
         saved_paths = analysis_dict.get("potential_directions") or []
         selected_path = next(
             (
@@ -848,11 +811,6 @@ def _run_roadmap_background(
             {},
         )
 
-        if selected_path.get("eligibility_status") == "not_possible":
-            raise RuntimeError(
-                "Roadmap generation was blocked because this path has a verified "
-                "eligibility barrier. Explore another pathway or re-check the official rule."
-            )
 
         skill_analysis = CareerSkillGapAnalysis.model_validate(
             {
@@ -875,7 +833,7 @@ def _run_roadmap_background(
             skill_analysis=skill_analysis,
             existing_skills=existing_skills,
             previous_interests=previous_interests,
-            student_profile=eligibility_profile,
+
             career_path=selected_path,
         )
 
@@ -960,16 +918,15 @@ def get_career_directions(
     # Use cached directions unless refresh is requested
     cached_directions = parse_json_safely(latest_analysis.potential_directions) or []
 
-    eligibility_profile = analysis_dict.get("career_eligibility_profile") or {}
-    cached_is_eligibility_aware = bool(cached_directions) and all(
+    cached_paths_are_current = bool(cached_directions) and all(
         isinstance(item, dict)
-        and item.get("eligibility_status")
+
         and item.get("pathway_summary")
         and item.get("pathway_version") == CAREER_PATH_VERSION
         for item in cached_directions
     )
 
-    if cached_directions and not force_refresh and cached_is_eligibility_aware:
+    if cached_directions and not force_refresh and cached_paths_are_current:
 
         # Old format may be strings
         directions = [
@@ -989,13 +946,12 @@ def get_career_directions(
         existing_skills=existing_skills,
         previous_interests=previous_interests,
         interest_analysis=analysis_dict,
-        student_profile=eligibility_profile,
+
     )
 
     directions = [direction.model_dump() for direction in result.directions]
 
-    # Cache the new eligibility-aware paths and invalidate any old roadmap
-    # generated for a same-named activity/role under the previous prompt.
+    # Cache current career paths and invalidate roadmaps tied to older path semantics.
     latest_analysis.potential_directions = json.dumps(directions)
     prior_path_analyses = (
         db.query(CareerPivotAnalysis)
@@ -1064,7 +1020,7 @@ def get_skill_gap(
                 existing_skills=existing_skills,
                 previous_interests=previous_interests,
                 interest_analysis=analysis_dict,
-                student_profile=analysis_dict.get("career_eligibility_profile") or {},
+
             )
             target_direction = (
                 direction_result.directions[0].name
@@ -1226,27 +1182,25 @@ def get_roadmap(
             target_direction = latest_analysis.interest
 
     saved_paths = parse_json_safely(latest_analysis.potential_directions) or []
-    paths_are_eligibility_aware = bool(saved_paths) and all(
+    paths_are_current = bool(saved_paths) and all(
         isinstance(item, dict)
-        and item.get("eligibility_status")
+
         and item.get("pathway_summary")
         and item.get("pathway_version") == CAREER_PATH_VERSION
         for item in saved_paths
     )
 
-    if not paths_are_eligibility_aware:
+    if not paths_are_current:
         direction_result = discover_career_directions(
             existing_skills=existing_skills,
             previous_interests=previous_interests,
             interest_analysis=analysis_dict,
-            student_profile=eligibility_profile,
+
         )
         saved_paths = [item.model_dump() for item in direction_result.directions]
         latest_analysis.potential_directions = json.dumps(saved_paths)
 
-        # These paths may have been generated under an older activity-based
-        # prompt. Clear old roadmaps so a same-named role cannot reuse a stale
-        # generic learning plan after career-path semantics change.
+        # Clear old roadmaps so older career-path semantics cannot be reused.
         prior_path_analyses = (
             db.query(CareerPivotAnalysis)
             .filter(CareerPivotAnalysis.student_id == student_id)
@@ -1284,21 +1238,6 @@ def get_roadmap(
             "roadmap": [],
         }
 
-    if selected_path.get("eligibility_status") == "not_possible":
-        return {
-            "has_analysis": True,
-            "status": "blocked",
-            "blocked_path": True,
-            "eligibility_status": "not_possible",
-            "student_id": student_id,
-            "direction": target_direction,
-            "transition_reason": selected_path.get("eligibility_reason", ""),
-            "eligibility_reason": selected_path.get("eligibility_reason", ""),
-            "official_resources": selected_path.get("official_resources", []),
-            "pathway_summary": selected_path.get("pathway_summary", ""),
-            "career_path": selected_path,
-            "roadmap": [],
-        }
 
     cached = (
         db.query(CareerPivotAnalysis)

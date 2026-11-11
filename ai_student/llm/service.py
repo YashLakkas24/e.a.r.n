@@ -469,14 +469,12 @@ def generate_direction_discovery(
     existing_skills: list[str] | None = None,
     previous_interests: list[str] | None = None,
     interest_analysis: dict | None = None,
-    student_profile: dict | None = None,
     rejected_directions: list[str] | None = None,
 ) -> DirectionDiscoveryResult:
 
     existing_skills = existing_skills or []
     previous_interests = previous_interests or []
     interest_analysis = interest_analysis or {}
-    student_profile = student_profile or {}
     rejected_directions = rejected_directions or []
 
     rejected_titles_note = ""
@@ -504,14 +502,13 @@ Previous interests:
 Interest analysis:
 {json.dumps(interest_analysis, indent=2)}
 
-Career eligibility profile:
- {rejected_titles_note}
+Rejected titles to avoid:
+{rejected_titles_note}
 
 Identify exactly 5 realistic career roles or specialization pathways. For each,
-provide the pathway type, a concise entry-route summary, and a conservative
-eligibility status based on the supplied profile. Missing profile facts must
-produce "needs_more_information", not "not_possible". Do not invent official
-exam dates, vacancies, or eligibility rules.
+provide the pathway type, a concise entry-route summary, and an interest-fit
+score. Do not assess or classify the student's personal eligibility. Never
+invent official exam dates, vacancies, or eligibility rules.
 
 Use only the JSON structure defined in the system instructions.
 """
@@ -544,22 +541,6 @@ Use only the JSON structure defined in the system instructions.
         ) from e
 
     try:
-        # Normalize common LLM enum variations conservatively before schema
-        # validation. In particular, "not eligible now" must not become an
-        # absolute "not possible" decision.
-        status_aliases = {
-            "eligible_now": "possible_now",
-            "possible": "possible_now",
-            "eligible_after_graduation": "possible_after_graduation",
-            "after_graduation": "possible_after_graduation",
-            "requires_additional_qualification": "additional_qualification_required",
-            "further_qualification_required": "additional_qualification_required",
-            "needs_more_info": "needs_more_information",
-            "unknown": "needs_more_information",
-            "not_eligible": "needs_more_information",
-            "not_eligible_currently": "needs_more_information",
-            "blocked": "not_possible",
-        }
         pathway_aliases = {
             "government_exam": "competitive_exam",
             "recruitment_exam": "competitive_exam",
@@ -574,13 +555,6 @@ Use only the JSON structure defined in the system instructions.
         for direction in directions:
             if not isinstance(direction, dict):
                 continue
-            status = (
-                str(direction.get("eligibility_status", "needs_more_information"))
-                .strip()
-                .lower()
-                .replace(" ", "_")
-            )
-            direction["eligibility_status"] = status_aliases.get(status, status)
             pathway_type = (
                 str(direction.get("pathway_type", "other"))
                 .strip()
@@ -588,19 +562,6 @@ Use only the JSON structure defined in the system instructions.
                 .replace(" ", "_")
             )
             direction["pathway_type"] = pathway_aliases.get(pathway_type, pathway_type)
-
-            missing = direction.get("missing_information", [])
-            if isinstance(missing, str):
-                direction["missing_information"] = [missing] if missing.strip() else []
-            elif not isinstance(missing, list):
-                direction["missing_information"] = []
-
-            # Incomplete facts cannot justify an absolute negative decision.
-            if (
-                direction["eligibility_status"] == "not_possible"
-                and direction["missing_information"]
-            ):
-                direction["eligibility_status"] = "needs_more_information"
 
         return DirectionDiscoveryResult.model_validate(data)
 
@@ -1343,7 +1304,6 @@ def generate_transition_roadmap(
     skill_assessments: list | None = None,
     transferable_skills: list | None = None,
     skill_gaps: list | None = None,
-    student_profile: dict | None = None,
     official_resources: list[dict] | None = None,
     career_path: dict | None = None,
 ) -> TransitionRoadmapResult:
@@ -1354,7 +1314,6 @@ def generate_transition_roadmap(
     skill_assessments = skill_assessments or []
     transferable_skills = transferable_skills or []
     skill_gaps = skill_gaps or []
-    student_profile = student_profile or {}
     official_resources = official_resources or []
     career_path = career_path or {}
 
@@ -1371,19 +1330,16 @@ PREVIOUS INTERESTS
 ------------------
 {json.dumps(previous_interests, indent=2)}
 
-CAREER ELIGIBILITY PROFILE
---------------------------
-{json.dumps(student_profile, indent=2)}
 
 SELECTED CAREER PATH ASSESSMENT
 -------------------------------
 {json.dumps(career_path, indent=2)}
 
-Use this selected-path assessment as the primary career context. Preserve its
-eligibility status and the specific entry-route summary. Do not replace a
-verified "not_possible" decision with a generic skill-development roadmap.
-If eligibility is "needs_more_information", place verification of those exact
-facts before exam/application steps.
+Use this selected career path as the primary career context. Preserve its
+role name, pathway type, and typical entry-route summary. Build the roadmap
+around the actual qualification, recruitment/admission route, skill gaps, and
+practical preparation steps. Do not infer or classify the student's personal
+eligibility; include official verification as an action where requirements apply.
 
 OFFICIAL RESOURCE ALLOWLIST (URLs only from this list may be returned)
 ----------------------------------------------------------------------
