@@ -222,6 +222,24 @@ class CareerPivotAnalysis(Base):
     roadmap = Column(Text, nullable=True)
 
 
+class CareerEligibilityProfile(Base):
+    __tablename__ = "career_eligibility_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(
+        String,
+        ForeignKey("students.student_id"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    age = Column(Integer, nullable=False)
+    highest_qualification = Column(String, nullable=False)
+    study_stream = Column(String, nullable=False)
+    citizenship = Column(String, nullable=False)
+    state = Column(String, nullable=False, default="")
+
+
 # ============================================================
 # NOTICE
 # ============================================================

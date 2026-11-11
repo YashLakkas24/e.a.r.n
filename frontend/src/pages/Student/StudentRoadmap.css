@@ -271,6 +271,71 @@
   margin: 0;
 }
 
+.roadmap-eligibility-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 17px 19px;
+  border: 1px solid rgba(96, 165, 250, 0.25);
+  border-radius: 13px;
+  background: rgba(30, 58, 138, 0.12);
+}
+
+.roadmap-eligibility-card p {
+  margin: 6px 0 0;
+  color: #cbd5e1;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.roadmap-eligibility-card small {
+  color: #94a3b8;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.route-status-label {
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.route-feasible {
+  border-color: rgba(52, 211, 153, 0.28);
+  background: rgba(52, 211, 153, 0.08);
+}
+
+.route-feasible .route-status-label {
+  color: #6ee7b7;
+}
+
+.route-preparation {
+  border-color: rgba(251, 191, 36, 0.28);
+  background: rgba(251, 191, 36, 0.07);
+}
+
+.route-preparation .route-status-label {
+  color: #fcd34d;
+}
+
+.route-unconfirmed {
+  border-color: rgba(96, 165, 250, 0.28);
+  background: rgba(96, 165, 250, 0.07);
+}
+
+.route-unconfirmed .route-status-label {
+  color: #93c5fd;
+}
+
+.route-not-possible {
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(127, 29, 29, 0.18);
+}
+
+.route-not-possible .route-status-label {
+  color: #fca5a5;
+}
+
 /* Timeline Section */
 .timeline-section {
   background: rgba(30, 41, 59, 0.4);
@@ -389,6 +454,31 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   color: #c084fc;
+}
+
+.step-type-tag {
+  align-self: flex-start;
+  padding: 4px 8px;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 999px;
+  background: rgba(168, 85, 247, 0.09);
+  color: #d8b4fe;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.step-type-exam,
+.step-type-admission {
+  border-color: rgba(251, 191, 36, 0.24);
+  background: rgba(251, 191, 36, 0.08);
+  color: #fcd34d;
+}
+
+.step-type-eligibility,
+.step-type-qualification {
+  border-color: rgba(96, 165, 250, 0.24);
+  background: rgba(96, 165, 250, 0.08);
+  color: #93c5fd;
 }
 
 .timeline-card-header h3 {

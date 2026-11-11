@@ -8,6 +8,7 @@ from ai_student.llm.service import (
 )
 
 from time import perf_counter
+from typing import Any
 
 from ai_student.career_pivot.schemas import (
     DirectionDiscoveryResult,
@@ -48,13 +49,18 @@ def discover_career_directions(
         interest_analysis=interest_analysis,
     )
 
-    # ========================================================
-    # Safety guard
-    #
-    # The prompt should ask Gemini for 5 directions.
-    # This prevents accidentally processing more than 5.
-    # ========================================================
-
+    feasibility_priority = {
+        "feasible": 0,
+        "needs_preparation": 1,
+        "eligibility_unconfirmed": 2,
+        "not_possible": 3,
+    }
+    direction_result.directions.sort(
+        key=lambda direction: (
+            feasibility_priority[direction.feasibility_status],
+            -direction.fit_score,
+        )
+    )
     direction_result.directions = direction_result.directions[:5]
 
     print("\nDISCOVERED DIRECTIONS:")
@@ -175,6 +181,7 @@ def generate_roadmap_for_skill_analysis(
     skill_analysis: CareerSkillGapAnalysis,
     existing_skills: list[str] | None = None,
     previous_interests: list[str] | None = None,
+    student_profile: dict[str, Any] | None = None,
 ) -> TransitionRoadmapResult:
     """Generate the roadmap separately, on demand."""
     existing_skills = existing_skills or []
@@ -189,6 +196,7 @@ def generate_roadmap_for_skill_analysis(
         skill_assessments=skill_analysis.skill_assessments,
         transferable_skills=skill_analysis.transferable_skills,
         skill_gaps=skill_analysis.skill_gaps,
+        student_profile=student_profile,
     )
     print(
         f"[CAREER PIVOT TIMING] Roadmap generation completed in "
@@ -219,6 +227,7 @@ def analyze_selected_direction(
         skill_analysis=skill_analysis,
         existing_skills=existing_skills,
         previous_interests=previous_interests,
+        student_profile=interest_analysis.get("student_profile", {}),
     )
 
     return CareerDirectionAnalysis(

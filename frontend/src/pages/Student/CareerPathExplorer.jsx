@@ -14,7 +14,11 @@ import {
   Sparkles,
   Target,
 } from "lucide-react";
-import { getStudentCareerDirections } from "../../services/studentService";
+import {
+  getStudentCareerDirections,
+  getStudentCareerEligibility,
+  saveStudentCareerEligibility,
+} from "../../services/studentService";
 import "./CareerPathExplorer.css";
 
 function getStudentId() {
@@ -66,14 +70,48 @@ function getPathIcon(directionName) {
 function normalizeDirections(directions) {
   if (!Array.isArray(directions)) return [];
 
+  const feasibilityPriority = {
+    feasible: 0,
+    needs_preparation: 1,
+    eligibility_unconfirmed: 2,
+    not_possible: 3,
+  };
+
   return directions
     .map((direction) =>
       typeof direction === "string"
-        ? { name: direction, fit_score: null, reason: "" }
-        : direction,
+        ? {
+            name: direction,
+            fit_score: null,
+            reason: "",
+            feasibility_status: "eligibility_unconfirmed",
+          }
+        : {
+            ...direction,
+            feasibility_status:
+              direction.feasibility_status || "eligibility_unconfirmed",
+          },
     )
     .filter((direction) => typeof direction.name === "string" && direction.name.trim())
-    .sort((a, b) => (Number(b.fit_score) || 0) - (Number(a.fit_score) || 0));
+    .sort((a, b) => {
+      const statusOrder =
+        (feasibilityPriority[a.feasibility_status] ?? 2) -
+        (feasibilityPriority[b.feasibility_status] ?? 2);
+      return statusOrder || (Number(b.fit_score) || 0) - (Number(a.fit_score) || 0);
+    });
+}
+
+function getFeasibilityLabel(status) {
+  switch (status) {
+    case "feasible":
+      return "Good route fit";
+    case "needs_preparation":
+      return "Preparation required";
+    case "not_possible":
+      return "NOT POSSIBLE";
+    default:
+      return "Eligibility to verify";
+  }
 }
 
 function CareerPathExplorer() {
@@ -86,6 +124,18 @@ function CareerPathExplorer() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [needsInterest, setNeedsInterest] = useState(false);
+  const [eligibilityProfile, setEligibilityProfile] = useState(null);
+  const [needsEligibility, setNeedsEligibility] = useState(false);
+  const [editingEligibility, setEditingEligibility] = useState(false);
+  const [savingEligibility, setSavingEligibility] = useState(false);
+  const [eligibilityError, setEligibilityError] = useState("");
+  const [eligibilityForm, setEligibilityForm] = useState({
+    age: "",
+    highest_qualification: "class_12",
+    study_stream: "not_sure",
+    citizenship: "indian",
+    state: "",
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -95,10 +145,22 @@ function CareerPathExplorer() {
       setError("");
 
       try {
-        // Refresh cached legacy suggestions once per browser tab session so
-        // the new role-focused prompt takes effect without repeated AI calls
-        // every time the student returns to this screen.
-        const refreshKey = `earn-career-paths-v2:${studentId}`;
+        const profileResult = await getStudentCareerEligibility(studentId);
+        if (cancelled) return;
+
+        if (!profileResult.has_profile) {
+          setNeedsEligibility(true);
+          setEligibilityProfile(null);
+          setDirections([]);
+          return;
+        }
+
+        setEligibilityProfile(profileResult.profile);
+        setEligibilityForm(profileResult.profile);
+        setNeedsEligibility(false);
+
+        // Refresh once so cached role priorities use the saved eligibility profile.
+        const refreshKey = `earn-career-paths-v3:${studentId}`;
         const shouldRefresh = sessionStorage.getItem(refreshKey) !== "done";
         const result = await getStudentCareerDirections(studentId, shouldRefresh);
 
@@ -162,11 +224,54 @@ function CareerPathExplorer() {
       setNeedsInterest(false);
       setInterest(result.interest || "");
       setDirections(normalizeDirections(result.directions));
-      sessionStorage.setItem(`earn-career-paths-v2:${studentId}`, "done");
+      sessionStorage.setItem(`earn-career-paths-v3:${studentId}`, "done");
     } catch (err) {
       setError(err.message || "Could not refresh career path recommendations.");
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const handleEligibilitySubmit = async (event) => {
+    event.preventDefault();
+    setSavingEligibility(true);
+    setEligibilityError("");
+    setError("");
+
+    try {
+      const saved = await saveStudentCareerEligibility(studentId, {
+        ...eligibilityForm,
+        age: Number(eligibilityForm.age),
+      });
+      setEligibilityProfile(saved.profile);
+      setNeedsEligibility(false);
+      setEditingEligibility(false);
+      setLoading(true);
+
+      try {
+        const result = await getStudentCareerDirections(studentId, true);
+        if (!result.has_analysis) {
+          setNeedsInterest(true);
+          setDirections([]);
+          setError(result.message || "Complete Interest+ to discover career paths.");
+        } else {
+          setNeedsInterest(false);
+          setInterest(result.interest || "");
+          setDirections(normalizeDirections(result.directions));
+          sessionStorage.setItem(`earn-career-paths-v3:${studentId}`, "done");
+        }
+      } catch (err) {
+        setError(
+          `Profile saved, but career roles could not be ranked: ${
+            err.message || "Please try refreshing the paths."
+          }`,
+        );
+      }
+    } catch (err) {
+      setEligibilityError(err.message || "Could not save eligibility details.");
+    } finally {
+      setSavingEligibility(false);
+      setLoading(false);
     }
   };
 
@@ -216,7 +321,7 @@ function CareerPathExplorer() {
           className="career-explorer-refresh"
           type="button"
           onClick={handleRefresh}
-          disabled={refreshing}
+          disabled={refreshing || !eligibilityProfile}
           title="Generate fresh career path suggestions"
         >
           <RefreshCw size={14} className={refreshing ? "career-spin" : ""} />
@@ -227,11 +332,11 @@ function CareerPathExplorer() {
       <main className="career-explorer-main">
         <section className="career-explorer-intro">
           <span className="career-explorer-eyebrow">YOUR INTERESTS, MULTIPLE POSSIBILITIES</span>
-          <h1>Explore where your interests can take you.</h1>
+          <h1>Explore India-focused career routes.</h1>
           <p>
-            Choose a career path to see its ordered learning roadmap, the skills
-            involved, and the areas you may need to develop. These are options
-            to explore—not predictions of career success.
+            Compare roles connected to your interest, ranked by fit and route
+            feasibility. Open a role to see the qualifications, admissions,
+            exams, and preparation steps that may lead there.
           </p>
         </section>
 
@@ -267,14 +372,159 @@ function CareerPathExplorer() {
           </div>
         )}
 
+        {/* {eligibilityProfile && !editingEligibility && (
+          <section className="career-eligibility-summary">
+            <div>
+              <span>ROUTE SCREENING PROFILE</span>
+              <p>
+                Age {eligibilityProfile.age} ·{" "}
+                {eligibilityProfile.highest_qualification.replaceAll("_", " ")} ·{" "}
+                {eligibilityProfile.study_stream.replaceAll("_", " ")}
+                {eligibilityProfile.state ? ` · ${eligibilityProfile.state}` : ""}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="career-eligibility-edit"
+              onClick={() => {
+                setEligibilityForm(eligibilityProfile);
+                setEditingEligibility(true);
+              }}
+            >
+              Edit profile
+            </button>
+          </section>
+        )}
+
+        {(needsEligibility || editingEligibility) && (
+          <form className="career-eligibility-form" onSubmit={handleEligibilitySubmit}>  
+            <div>
+              <span className="career-explorer-eyebrow">PERSONALIZE ROUTE FEASIBILITY</span>
+              <h2>Tell us what affects your eligibility</h2>
+              <p>
+                These details help order routes and flag requirements to check.
+                Your profile is private to your account. Recommendations are
+                guidance—not official eligibility decisions.
+              </p>
+            </div>
+
+            <div className="career-eligibility-fields">
+              <label>
+                Age
+                <input
+                  type="number"
+                  min="14"
+                  max="80"
+                  required
+                  value={eligibilityForm.age}
+                  onChange={(event) =>
+                    setEligibilityForm({ ...eligibilityForm, age: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                Highest qualification
+                <select
+                  value={eligibilityForm.highest_qualification}
+                  onChange={(event) =>
+                    setEligibilityForm({
+                      ...eligibilityForm,
+                      highest_qualification: event.target.value,
+                    })
+                  }
+                >
+                  <option value="class_10_or_below">Class 10 or below</option>
+                  <option value="class_12">Class 12</option>
+                  <option value="diploma">Diploma</option>
+                  <option value="bachelors">Bachelor's degree</option>
+                  <option value="masters">Master's degree</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label>
+                Study stream
+                <select
+                  value={eligibilityForm.study_stream}
+                  onChange={(event) =>
+                    setEligibilityForm({
+                      ...eligibilityForm,
+                      study_stream: event.target.value,
+                    })
+                  }
+                >
+                  <option value="science">Science</option>
+                  <option value="commerce">Commerce</option>
+                  <option value="arts_humanities">Arts / Humanities</option>
+                  <option value="engineering_technical">Engineering / Technical</option>
+                  <option value="other">Other</option>
+                  <option value="not_sure">Not sure</option>
+                </select>
+              </label>
+              <label>
+                Citizenship
+                <select
+                  value={eligibilityForm.citizenship}
+                  onChange={(event) =>
+                    setEligibilityForm({
+                      ...eligibilityForm,
+                      citizenship: event.target.value,
+                    })
+                  }
+                >
+                  <option value="indian">Indian citizen</option>
+                  <option value="other">Other citizenship</option>
+                  <option value="prefer_not_to_say">Prefer not to say</option>
+                </select>
+              </label>
+              <label>
+                State / UT (optional)
+                <input
+                  type="text"
+                  maxLength="80"
+                  value={eligibilityForm.state}
+                  onChange={(event) =>
+                    setEligibilityForm({ ...eligibilityForm, state: event.target.value })
+                  }
+                />
+              </label>
+            </div>
+
+            {eligibilityError && (
+              <p className="career-eligibility-error" role="alert">
+                {eligibilityError}
+              </p>
+            )}
+            <div className="career-eligibility-actions">
+              <button
+                className="career-explorer-primary"
+                type="submit"
+                disabled={savingEligibility}  
+              >
+                {savingEligibility ? "Saving profile..." : "Save and rank my roles"}
+                <ArrowRight size={16} />
+              </button>
+              {editingEligibility && (
+                <button
+                  className="career-eligibility-edit"
+                  type="button"
+                  onClick={() => setEditingEligibility(false)}
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </form>
+        )} */}
+
         <section className="career-paths-section">
           <div className="career-paths-heading">
             <div>
-              <span className="career-explorer-eyebrow">PERSONALIZED EXPLORATION</span>
-              <h2>Career paths to explore</h2>
+              <span className="career-explorer-eyebrow">INDIA · PRIORITIZED FOR YOUR PROFILE</span>
+              <h2>Career roles to explore</h2>
               <p>
-                Select a path to open its personalized roadmap. You can explore
-                different paths without committing to one career.
+                Select a role to open its qualification, admission, exam, and
+                preparation sequence. Routes with known eligibility barriers
+                appear last.
               </p>
             </div>
             <span className="career-path-count">{directions.length} paths</span>
@@ -296,20 +546,32 @@ function CareerPathExplorer() {
                         <Icon size={22} />
                       </div>
                       <span className="career-path-number">
-                        PATH {String(index + 1).padStart(2, "0")}
+                        PRIORITY {String(index + 1).padStart(2, "0")}
                       </span>
                     </div>
 
                     <h3>{direction.name}</h3>
+                    <span
+                      className={`career-feasibility-badge feasibility-${direction.feasibility_status}`}
+                    >
+                      {getFeasibilityLabel(direction.feasibility_status)}
+                    </span>
                     <p className="career-path-reason">
                       {direction.reason ||
                         "Suggested for exploration based on your interest profile."}
                     </p>
+                    {direction.feasibility_reason && (
+                      <p
+                        className={`career-feasibility-reason feasibility-reason-${direction.feasibility_status}`}
+                      >
+                        {direction.feasibility_reason}
+                      </p>
+                    )}
 
                     {score !== null && (
                       <div className="career-fit">
                         <div className="career-fit-label">
-                          <span>Exploration fit</span>
+                          <span>Interest fit</span>
                           <strong>{score}/100</strong>
                         </div>
                         <div
@@ -333,6 +595,15 @@ function CareerPathExplorer() {
                   </article>
                 );
               })}
+            </div>
+          ) : needsEligibility ? (
+            <div className="career-explorer-empty">
+              <h3>Complete your route profile to get ranked roles</h3>
+              <p>
+                Add a few eligibility details above. We will then prioritize
+                suitable India-focused career routes and show uncertain
+                requirements clearly.
+              </p>
             </div>
           ) : (
             <div className="career-explorer-empty">
@@ -360,9 +631,9 @@ function CareerPathExplorer() {
         <aside className="career-explorer-note">
           <BookOpenIcon />
           <p>
-            Each path opens an ordered roadmap with milestones and focus skills.
-            The skill sequence is a suggested learning route; it can be refined
-            as you build evidence of your abilities.
+            These are India-focused role recommendations, not live job
+            vacancies. Each route is guidance only: confirm current exam and
+            admission requirements with the official authority before acting.
           </p>
         </aside>
       </main>

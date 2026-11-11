@@ -1,5 +1,6 @@
 import json
 import time
+from typing import Any
 
 from openai import (
     RateLimitError,
@@ -1266,6 +1267,7 @@ def generate_transition_roadmap(
     skill_assessments: list | None = None,
     transferable_skills: list | None = None,
     skill_gaps: list | None = None,
+    student_profile: dict[str, Any] | None = None,
 ) -> TransitionRoadmapResult:
 
     existing_skills = existing_skills or []
@@ -1274,6 +1276,7 @@ def generate_transition_roadmap(
     skill_assessments = skill_assessments or []
     transferable_skills = transferable_skills or []
     skill_gaps = skill_gaps or []
+    student_profile = student_profile or {}
 
     user_prompt = f"""
 TARGET DIRECTION
@@ -1287,6 +1290,10 @@ EXISTING STUDENT SKILLS
 PREVIOUS INTERESTS
 ------------------
 {json.dumps(previous_interests, indent=2)}
+
+STUDENT ACADEMIC AND ELIGIBILITY PROFILE
+----------------------------------------
+{json.dumps(student_profile, indent=2)}
 
 REQUIRED SKILLS FROM STAGE 2
 ----------------------------

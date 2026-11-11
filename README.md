@@ -91,8 +91,9 @@ The result: teachers get an early, explainable warning system; students get a pe
 - Personal academic profile (attendance, previous-semester CGPA, extracurricular count)
 - **Interest+**: select an interest from a fixed list, then answer up to 5 adaptively-generated questions (scale / single-choice / multiple-choice / text)
 - AI-generated Interest+ analysis: interest score, confidence score, experience score, capability score, strengths, skill gaps, potential directions, next steps, evidence, and summary
-- AI-discovered career directions based on the Interest+ analysis
-- AI-generated skill-gap analysis and a step-by-step personalized roadmap for a chosen career direction
+- AI-discovered, India-focused career roles prioritized by Interest+ fit and a student eligibility profile
+- A selected-role route with qualification, admission, exam, skill-building, and application steps; uncertain or unsuitable routes are identified for official eligibility checks
+- AI-generated skill-gap analysis tied to each chosen career direction
 - On-demand "career pivot" re-analysis for a specific direction
 
 ## 4. System Architecture

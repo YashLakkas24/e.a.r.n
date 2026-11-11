@@ -29,6 +29,13 @@ class Direction(BaseModel):
     name: str
     fit_score: int = Field(ge=0, le=100)
     reason: str
+    feasibility_status: Literal[
+        "feasible",
+        "needs_preparation",
+        "eligibility_unconfirmed",
+        "not_possible",
+    ] = "eligibility_unconfirmed"
+    feasibility_reason: str = ""
 
 class DirectionDiscoveryResult(BaseModel):
     directions: list[Direction]
@@ -104,6 +111,15 @@ class RoadmapStep(BaseModel):
     title: str
     description: str
     skills: list[str]
+    step_type: Literal[
+        "eligibility",
+        "qualification",
+        "admission",
+        "exam",
+        "learning",
+        "experience",
+        "application",
+    ] = "learning"
 
 class TransitionRoadmapResult(BaseModel):
     transition_difficulty: Literal[
@@ -115,6 +131,13 @@ class TransitionRoadmapResult(BaseModel):
     transition_reason: str
 
     roadmap: list[RoadmapStep]
+    eligibility_status: Literal[
+        "feasible",
+        "needs_preparation",
+        "eligibility_unconfirmed",
+        "not_possible",
+    ] = "eligibility_unconfirmed"
+    eligibility_reason: str = ""
 
 class CareerDirectionAnalysis(BaseModel):
     """

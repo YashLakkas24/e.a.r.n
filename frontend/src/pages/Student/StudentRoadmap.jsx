@@ -38,6 +38,35 @@ const DIFFICULTY_CONFIG = {
   },
 };
 
+const ELIGIBILITY_CONFIG = {
+  feasible: {
+    label: "Route appears feasible",
+    className: "route-feasible",
+  },
+  needs_preparation: {
+    label: "Preparation required",
+    className: "route-preparation",
+  },
+  eligibility_unconfirmed: {
+    label: "Eligibility to verify",
+    className: "route-unconfirmed",
+  },
+  not_possible: {
+    label: "NOT POSSIBLE with current profile",
+    className: "route-not-possible",
+  },
+};
+
+const STEP_TYPE_LABELS = {
+  eligibility: "Eligibility check",
+  qualification: "Qualification",
+  admission: "Admission",
+  exam: "Entrance / recruitment exam",
+  learning: "Skill development",
+  experience: "Experience",
+  application: "Job application",
+};
+
 function StudentRoadmap() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -229,16 +258,16 @@ function StudentRoadmap() {
           </button>
           <div className="roadmap-brand">
             <Sparkles size={19} />
-            <span>AI Learning Roadmap</span>
+            <span>Career Route Planner</span>
           </div>
         </header>
         <main className="roadmap-main">
           <section className="state-card">
             <div className="ai-spinner" />
-            <h2>Synthesizing Personalized Roadmap...</h2>
+            <h2>Building your career route...</h2>
             <p>
-              The AI is organizing milestone learning sequences tailored to
-              bridge your specific skill gaps.
+              The route is connecting your current profile to the qualifications,
+              admissions, exams, and preparation steps for this role.
             </p>
           </section>
         </main>
@@ -259,7 +288,7 @@ function StudentRoadmap() {
           </button>
           <div className="roadmap-brand">
             <Sparkles size={19} />
-            <span>AI Learning Roadmap</span>
+            <span>Career Route Planner</span>
           </div>
         </header>
         <main className="roadmap-main">
@@ -292,6 +321,9 @@ function StudentRoadmap() {
   const diffCfg =
     DIFFICULTY_CONFIG[roadmapData?.transition_difficulty] ||
     DIFFICULTY_CONFIG.moderate;
+  const eligibilityCfg =
+    ELIGIBILITY_CONFIG[roadmapData?.eligibility_status] ||
+    ELIGIBILITY_CONFIG.eligibility_unconfirmed;
 
   return (
     <div className="roadmap-page">
@@ -306,17 +338,17 @@ function StudentRoadmap() {
 
         <div className="roadmap-brand">
           <Sparkles size={19} />
-          <span>Personalized AI Roadmap</span>
+          <span>Personalized Career Route</span>
         </div>
 
         <button
           className="roadmap-refresh-btn"
           disabled={refreshing}
           onClick={handleRefresh}
-          title="Regenerate Roadmap with AI"
+          title="Regenerate career route"
         >
           <RotateCcw size={14} className={refreshing ? "spin-icon" : ""} />
-          {refreshing ? "Synthesizing..." : "Regenerate Roadmap"}
+          {refreshing ? "Updating route..." : "Regenerate route"}
         </button>
       </header>
 
@@ -373,7 +405,7 @@ function StudentRoadmap() {
                   {diffCfg.label}
                 </span>
                 <span className="milestones-count">
-                  {steps.length} Milestone Steps
+                  {steps.length} Route Steps
                 </span>
               </div>
             </div>
@@ -401,6 +433,20 @@ function StudentRoadmap() {
           )}
         </section>
 
+        <section className={`roadmap-eligibility-card ${eligibilityCfg.className}`}>
+          <div>
+            <span className="route-status-label">{eligibilityCfg.label}</span>
+            <p>
+              {roadmapData?.eligibility_reason ||
+                "The available profile does not confirm every entry requirement for this route."}
+            </p>
+          </div>
+          <small>
+            Verify age limits, qualifications, dates, and other criteria in the
+            latest official exam notification or institution information.
+          </small>
+        </section>
+
         {/* Roadmap Timeline */}
         <section className="timeline-section">
           <div className="timeline-header">
@@ -408,9 +454,10 @@ function StudentRoadmap() {
               <Milestone size={20} />
             </div>
             <div>
-              <h2>Milestone Learning Path</h2>
+              <h2>Career route, step by step</h2>
               <span>
-                Recommended chronological order to develop missing capabilities
+                Follow the qualification, admission, exam, and preparation
+                sequence in order.
               </span>
             </div>
           </div>
@@ -431,6 +478,9 @@ function StudentRoadmap() {
                   <div className="timeline-card">
                     <div className="timeline-card-header">
                       <span className="step-tag">Step {paddedNumber}</span>
+                      <span className={`step-type-tag step-type-${step.step_type || "learning"}`}>
+                        {STEP_TYPE_LABELS[step.step_type] || "Route step"}
+                      </span>
                       <h3>{step.title}</h3>
                     </div>
 

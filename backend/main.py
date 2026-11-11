@@ -24,6 +24,7 @@ from models import (
     QuizAnswer,
     InterestAnalysis,
     CareerPivotAnalysis,
+    CareerEligibilityProfile,
     Notice,
     Notification,
 )
