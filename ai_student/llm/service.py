@@ -576,9 +576,19 @@ Use only the JSON structure defined in the system instructions.
         for direction in directions:
             if not isinstance(direction, dict):
                 continue
-            status = str(direction.get("eligibility_status", "needs_more_information")).strip().lower().replace(" ", "_")
+            status = (
+                str(direction.get("eligibility_status", "needs_more_information"))
+                .strip()
+                .lower()
+                .replace(" ", "_")
+            )
             direction["eligibility_status"] = status_aliases.get(status, status)
-            pathway_type = str(direction.get("pathway_type", "other")).strip().lower().replace(" ", "_")
+            pathway_type = (
+                str(direction.get("pathway_type", "other"))
+                .strip()
+                .lower()
+                .replace(" ", "_")
+            )
             direction["pathway_type"] = pathway_aliases.get(pathway_type, pathway_type)
 
             missing = direction.get("missing_information", [])
@@ -588,7 +598,10 @@ Use only the JSON structure defined in the system instructions.
                 direction["missing_information"] = []
 
             # Incomplete facts cannot justify an absolute negative decision.
-            if direction["eligibility_status"] == "not_possible" and direction["missing_information"]:
+            if (
+                direction["eligibility_status"] == "not_possible"
+                and direction["missing_information"]
+            ):
                 direction["eligibility_status"] = "needs_more_information"
 
         return DirectionDiscoveryResult.model_validate(data)
@@ -1332,13 +1345,9 @@ def generate_transition_roadmap(
     skill_assessments: list | None = None,
     transferable_skills: list | None = None,
     skill_gaps: list | None = None,
-<<<<<<< HEAD
-    student_profile: dict[str, Any] | None = None,
-=======
     student_profile: dict | None = None,
     official_resources: list[dict] | None = None,
     career_path: dict | None = None,
->>>>>>> f0ef4b1114a01c46c857e86892a3e74ee8c95de7
 ) -> TransitionRoadmapResult:
 
     existing_skills = existing_skills or []
@@ -1348,12 +1357,8 @@ def generate_transition_roadmap(
     transferable_skills = transferable_skills or []
     skill_gaps = skill_gaps or []
     student_profile = student_profile or {}
-<<<<<<< HEAD
-=======
     official_resources = official_resources or []
     career_path = career_path or {}
->>>>>>> f0ef4b1114a01c46c857e86892a3e74ee8c95de7
-
     user_prompt = f"""
 TARGET DIRECTION
 ----------------
@@ -1367,12 +1372,6 @@ PREVIOUS INTERESTS
 ------------------
 {json.dumps(previous_interests, indent=2)}
 
-<<<<<<< HEAD
-STUDENT ACADEMIC AND ELIGIBILITY PROFILE
-----------------------------------------
-{json.dumps(student_profile, indent=2)}
-
-=======
 CAREER ELIGIBILITY PROFILE
 --------------------------
 {json.dumps(student_profile, indent=2)}
@@ -1390,8 +1389,7 @@ facts before exam/application steps.
 OFFICIAL RESOURCE ALLOWLIST (URLs only from this list may be returned)
 ----------------------------------------------------------------------
 {json.dumps(official_resources, indent=2)}
-
->>>>>>> f0ef4b1114a01c46c857e86892a3e74ee8c95de7
+ 
 REQUIRED SKILLS FROM STAGE 2
 ----------------------------
 {json.dumps(
