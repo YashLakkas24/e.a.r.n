@@ -36,7 +36,6 @@ def discover_career_directions(
     existing_skills = existing_skills or []
     previous_interests = previous_interests or []
     interest_analysis = interest_analysis or {}
-    student_profile = student_profile or {}
 
     interest = interest_analysis.get("interest", "")
 
@@ -74,7 +73,6 @@ def discover_career_directions(
             existing_skills=existing_skills,
             previous_interests=previous_interests,
             interest_analysis=interest_analysis,
-            student_profile=student_profile,
             rejected_directions=rejected_titles,
         )
 
@@ -105,17 +103,10 @@ def discover_career_directions(
                 "Confirm the formal qualifications and entry procedure in the "
                 "relevant official recruitment or admissions notice."
             )
-        if not direction.eligibility_reason:
-            direction.eligibility_reason = (
-                "This is a preliminary fit assessment. Verify role-specific "
-                "eligibility in the official source before deciding."
-            )
+
         direction.official_resources = [
             CareerResource.model_validate(resource)
-            for resource in get_official_resources_for_direction(
-                direction.name,
-                student_profile.get("state_or_ut"),
-            )
+            for resource in get_official_resources_for_direction(direction.name)
         ]
 
     direction_result.directions.sort(
@@ -248,18 +239,13 @@ def generate_roadmap_for_skill_analysis(
     skill_analysis: CareerSkillGapAnalysis,
     existing_skills: list[str] | None = None,
     previous_interests: list[str] | None = None,
-    student_profile: dict | None = None,
     career_path: dict | None = None,
 ) -> TransitionRoadmapResult:
     """Generate the career-entry roadmap separately, on demand."""
     existing_skills = existing_skills or []
     previous_interests = previous_interests or []
-    student_profile = student_profile or {}
     career_path = career_path or {}
-    official_resources = get_official_resources_for_direction(
-        skill_analysis.direction,
-        student_profile.get("state_or_ut"),
-    )
+    official_resources = get_official_resources_for_direction(skill_analysis.direction)
 
     stage_started = perf_counter()
     result = generate_transition_roadmap(
@@ -270,7 +256,6 @@ def generate_roadmap_for_skill_analysis(
         skill_assessments=skill_analysis.skill_assessments,
         transferable_skills=skill_analysis.transferable_skills,
         skill_gaps=skill_analysis.skill_gaps,
-        student_profile=student_profile,
         official_resources=official_resources,
         career_path=career_path,
     )
